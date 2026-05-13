@@ -15,6 +15,7 @@ const samplePath = document.getElementById('sample-path');
 const sampleHost = document.getElementById('sample-host');
 const sampleTitle = document.getElementById('sample-title');
 const sampleDescription = document.getElementById('sample-description');
+const sampleThumb = document.getElementById('sample-thumb');
 const adminLink = document.getElementById('admin-link');
 const modeButtons = [...document.querySelectorAll('.mode')];
 
@@ -25,6 +26,7 @@ const YOUTUBE_RE = /^(https?:\/\/)?((www|m|music)\.)?(youtube\.com\/(watch\?v=|s
 const setStatus = (message, type = '') => {
   statusEl.textContent = message || '';
   statusEl.className = `status ${type}`.trim();
+  form?.setAttribute('data-state', type || (message ? 'busy' : 'idle'));
 };
 
 const parseJson = async (response) => {
@@ -72,6 +74,10 @@ const updateSamplePreview = () => {
   }
   sampleTitle.textContent = metaTitle.value.trim() || 'Preview social editable';
   sampleDescription.textContent = metaDescription.value.trim() || 'Título, descripción e imagen quedan definidos por el creador del enlace.';
+  const image = metaImage.value.trim();
+  if (sampleThumb) {
+    sampleThumb.style.backgroundImage = image ? `url("${image.replace(/"/g, '%22')}")` : '';
+  }
   updateSamplePath();
 };
 
@@ -85,7 +91,11 @@ fetch('/api/admin-eligible', { credentials: 'same-origin' })
 modeButtons.forEach((button) => {
   button.addEventListener('click', () => {
     mode = button.dataset.mode;
-    modeButtons.forEach((item) => item.classList.toggle('active', item === button));
+    modeButtons.forEach((item) => {
+      const active = item === button;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
+    });
     customAlias.placeholder = mode === 'short' ? 'mi-link' : 'root/kernel/payload';
     updateSamplePath();
   });
@@ -120,7 +130,7 @@ loadPreview?.addEventListener('click', async () => {
   }
 });
 
-[targetInput, customAlias, metaTitle, metaDescription].forEach((input) => {
+[targetInput, customAlias, metaTitle, metaDescription, metaImage].forEach((input) => {
   input?.addEventListener('input', updateSamplePreview);
 });
 
@@ -165,6 +175,9 @@ copyLink?.addEventListener('click', async () => {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
+    const original = copyLink.textContent;
+    copyLink.textContent = 'Copiado';
+    setTimeout(() => { copyLink.textContent = original; }, 1400);
     setStatus('Copiado.', 'success');
   } catch {
     setStatus('No se pudo copiar automáticamente.', 'error');

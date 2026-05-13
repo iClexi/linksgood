@@ -14,7 +14,7 @@ const DATABASE_URL = process.env.LINKS_DATABASE_URL || '';
 const APP_SECRET = process.env.LINKS_APP_SECRET || '';
 const ADMIN_SECRET = (process.env.LINKS_ADMIN_ENTRY_SECRET || '').trim();
 const ADMIN_COOKIE = 'linksgood_admin';
-const ASSET_VERSION = '20260513-redesign';
+const ASSET_VERSION = '20260513-front2';
 const ADMIN_TTL_SECONDS = Math.max(300, Number.parseInt(process.env.LINKS_ADMIN_SESSION_TTL_SECONDS || '21600', 10));
 const ADMIN_IP = process.env.LINKS_ADMIN_IP || '192.168.200.1';
 const RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.LINKS_RETENTION_DAYS || '90', 10));
@@ -289,7 +289,7 @@ function appPage() {
     title: 'Linksgood',
     body: `<main class="app-page">
   <nav class="topbar">
-    <a class="brand" href="/" aria-label="Linksgood inicio"><span class="brand-mark">LG</span><span>Linksgood</span></a>
+    <a class="brand" href="/" aria-label="Linksgood inicio"><span class="brand-mark">LG</span><span>Linksgood</span><span class="brand-mode">Direct</span></a>
     <div class="nav-actions">
       <a class="nav-link" href="/terminos">Términos</a>
       <a class="nav-link" href="/privacidad">Privacidad</a>
@@ -299,8 +299,8 @@ function appPage() {
   <section class="studio-grid">
     <section class="workbench">
       <div class="workbench-title">
-        <span class="eyebrow">Acortador + alargador</span>
-        <h1>Convierte cualquier URL en un enlace con carácter.</h1>
+        <span class="eyebrow">Link console</span>
+        <h1>Acorta, alarga y personaliza enlaces.</h1>
       </div>
       <form id="link-form" class="creator" autocomplete="off">
         <label class="field primary-field">
@@ -308,8 +308,8 @@ function appPage() {
           <input id="target-url" name="target" type="text" inputmode="url" placeholder="https://youtube.com/watch?v=..." required>
         </label>
         <div class="mode-row" role="tablist" aria-label="Modo">
-          <button class="mode active" type="button" data-mode="short"><span>Corto</span><small>/s/9Kx2</small></button>
-          <button class="mode" type="button" data-mode="long"><span>Largo</span><small>/go/root/kernel</small></button>
+          <button class="mode active" type="button" data-mode="short" aria-pressed="true"><span>Corto</span><small>/s/9Kx2</small></button>
+          <button class="mode" type="button" data-mode="long" aria-pressed="false"><span>Largo</span><small>/go/root/kernel</small></button>
         </div>
         <div class="grid two">
           <label class="field">
@@ -357,10 +357,11 @@ function appPage() {
       <div class="signal-header">
         <span class="eyebrow">Salida</span>
         <strong id="sample-path">/s/7kP9xQ2</strong>
+        <small>302 directo</small>
       </div>
       <img class="signal-art" src="/assets/link-map.svg" alt="">
       <div class="social-preview" aria-label="Preview social de ejemplo">
-        <div class="preview-image"></div>
+        <div id="sample-thumb" class="preview-image"></div>
         <div>
           <span id="sample-host" class="preview-host">linksgood</span>
           <strong id="sample-title">Preview social editable</strong>
@@ -368,8 +369,8 @@ function appPage() {
         </div>
       </div>
       <div class="audit-strip">
-        <span>Visita con aviso</span>
-        <strong>El aviso de datos está en términos y privacidad.</strong>
+        <span>Actividad</span>
+        <strong>IP, user-agent, referrer e idioma en términos.</strong>
       </div>
     </aside>
   </section>
