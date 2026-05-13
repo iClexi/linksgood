@@ -5,8 +5,8 @@ Acortador y alargador de enlaces para `links.iclexi.tech`.
 ## Principios
 
 - No hace tracking oculto.
-- Los enlaces muestran una pantalla de consentimiento antes de redirigir.
-- La analítica visible para el creador se registra sólo cuando la persona acepta continuar.
+- Los enlaces redirigen directamente al destino.
+- La analítica visible para el creador se limita a datos básicos del request descritos en términos y privacidad.
 - Los secretos viven fuera del repo, en `/etc/links/links.env` o `/root/.secrets/`.
 
 ## Desarrollo

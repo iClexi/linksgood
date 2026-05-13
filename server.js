@@ -369,7 +369,7 @@ function appPage() {
       </div>
       <div class="audit-strip">
         <span>Visita con aviso</span>
-        <strong>IP y navegador se muestran sólo tras consentimiento.</strong>
+        <strong>El aviso de datos está en términos y privacidad.</strong>
       </div>
     </aside>
   </section>
@@ -387,55 +387,16 @@ function legalPage(kind) {
   <article class="doc">
     <span class="eyebrow">Legal</span>
     <h1>${isTerms ? 'Términos y condiciones' : 'Privacidad'}</h1>
-    <p>Linksgood crea enlaces cortos o largos con una pantalla intermedia de consentimiento. El servicio no debe usarse para acoso, phishing, robo de credenciales, engaño, doxxing ni rastreo encubierto.</p>
-    <p>Cuando una persona abre un enlace, primero ve un aviso. Si decide continuar, se registra una visita asociada al enlace para que su creador pueda verla.</p>
-    <h2>Datos que puede registrar una visita consentida</h2>
-    <p>IP pública recibida por el servidor, fecha, user-agent, idioma, referrer, viewport, pantalla, zona horaria y otros datos técnicos enviados por el navegador.</p>
+    <p>Linksgood crea enlaces cortos o largos que redirigen directamente al destino configurado. El servicio no debe usarse para acoso, phishing, robo de credenciales, engaño, doxxing ni rastreo encubierto.</p>
+    <p>Cuando una persona abre un enlace, la redirección puede registrar una visita asociada al enlace para que su creador y el administrador puedan ver actividad básica.</p>
+    <h2>Datos que puede registrar una visita</h2>
+    <p>IP pública recibida por el servidor o proxy, fecha, user-agent, idioma, referrer y datos técnicos de entrega como host, protocolo reenviado o identificador de proxy. Linksgood no ejecuta una pantalla previa para recolectar viewport, pantalla o zona horaria antes de redirigir.</p>
     <h2>Responsabilidad del usuario</h2>
     <p>Quien crea un enlace debe usarlo de forma transparente, proporcional y legal. No se permite presentarlo como una herramienta de captura secreta.</p>
     <h2>Retención</h2>
     <p>La retención operativa por defecto es de ${RETENTION_DAYS} días, salvo ajustes administrativos. Este texto es informativo y no sustituye asesoría legal profesional.</p>
   </article>
 </main>`,
-  });
-}
-
-function linkVisitPage(link) {
-  const title = link.meta_title || `Enlace a ${link.target_host}`;
-  const description = link.meta_description || 'Este enlace usa Linksgood y muestra un aviso antes de redirigir.';
-  const image = link.meta_image || '';
-  const head = `
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="${escapeAttr(title)}">
-  <meta property="og:description" content="${escapeAttr(description)}">
-  <meta property="og:url" content="${escapeAttr(`${PUBLIC_URL}/${link.alias_path}`)}">
-  ${image ? `<meta property="og:image" content="${escapeAttr(image)}">` : ''}
-  <meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`;
-  return pageShell({
-    title,
-    description,
-    head,
-    body: `<main class="consent-page">
-  <section class="consent-box">
-    <div class="consent-media">${image ? `<img src="${escapeAttr(image)}" alt="">` : '<img src="/assets/link-map.svg" alt="">'} </div>
-    <div class="consent-body">
-      <span class="eyebrow">Salida externa</span>
-      <h1>${escapeHtml(title)}</h1>
-      <p>${escapeHtml(description)}</p>
-      <div class="destination">${escapeHtml(link.target_host)}</div>
-      <div class="consent-copy">
-        <strong>Antes de continuar</strong>
-        <span>Si aceptas, este enlace registrará IP pública, navegador, referrer, idioma, viewport, zona horaria y hora de acceso para el creador del enlace y el administrador.</span>
-      </div>
-      <div class="actions">
-        <button id="continue" class="button" type="button">Aceptar y continuar</button>
-        <a class="secondary" href="/">Cancelar</a>
-      </div>
-      <p id="visit-status" class="status"></p>
-    </div>
-  </section>
-</main>`,
-    scripts: `<script>window.LINKSGOOD_VISIT=${jsonScript({ id: link.id })}</script><script src="/assets/visit.js" type="module"></script>`,
   });
 }
 
@@ -450,7 +411,7 @@ function statsPage(id, key) {
     <div id="stats-summary" class="summary-grid"></div>
   </section>
   <section class="panel">
-    <div class="panel-heading"><h2>Visitas consentidas</h2></div>
+    <div class="panel-heading"><h2>Visitas registradas</h2></div>
     <div id="visits" class="table-wrap"></div>
   </section>
 </main>`,
@@ -653,33 +614,34 @@ async function handlePreview(req, res) {
   jsonResponse(res, 200, { ok: true, preview: data });
 }
 
-async function handleVisit(req, res, id) {
-  const linkResult = await pool.query('SELECT * FROM links WHERE id = $1 AND active = true', [id]);
-  const link = linkResult.rows[0];
-  if (!link) return jsonResponse(res, 404, { error: 'Enlace no encontrado.' });
-  if (await isIpBlocked(publicIp(req))) return jsonResponse(res, 403, { error: 'Acceso denegado.' });
-  const payload = await readJson(req);
-  const browser = typeof payload.browser === 'object' && payload.browser ? payload.browser : {};
+async function recordDirectVisit(req, link) {
   await pool.query(
-    `INSERT INTO link_visits (link_id, ip, public_ip, user_agent, referer, accept_language, browser, server)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    `INSERT INTO link_visits (link_id, consented, ip, public_ip, user_agent, referer, accept_language, browser, server)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       link.id,
+      false,
       clientIp(req).slice(0, 80),
       publicIp(req).slice(0, 80),
       String(req.headers['user-agent'] || '').slice(0, 700),
       String(req.headers.referer || '').slice(0, 700),
       String(req.headers['accept-language'] || '').slice(0, 200),
-      JSON.stringify(browser),
+      JSON.stringify({}),
       JSON.stringify({
         host: req.headers.host || '',
         forwarded_proto: req.headers['x-forwarded-proto'] || '',
         cf_ray: req.headers['cf-ray'] || '',
+        redirect: 'direct',
       }),
     ],
   );
   await pool.query('UPDATE links SET clicks = clicks + 1, updated_at = now() WHERE id = $1', [link.id]);
-  jsonResponse(res, 200, { ok: true, redirect: link.target_url });
+}
+
+async function redirectToLink(req, res, link) {
+  if (await isIpBlocked(publicIp(req))) return jsonResponse(res, 403, { error: 'Acceso denegado.' });
+  if (req.method === 'GET') await recordDirectVisit(req, link);
+  return redirect(res, link.target_url);
 }
 
 async function isIpBlocked(ip) {
@@ -781,14 +743,12 @@ async function handleRoute(req, res) {
     if (req.method === 'POST' && pathname === '/api/preview') return handlePreview(req, res);
     const ownerMatch = pathname.match(/^\/api\/owner\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{20,80})$/);
     if (req.method === 'GET' && ownerMatch) return ownerStats(req, res, ownerMatch[1], ownerMatch[2]);
-    const visitMatch = pathname.match(/^\/api\/visit\/([0-9a-f-]{36})$/);
-    if (req.method === 'POST' && visitMatch) return handleVisit(req, res, visitMatch[1]);
     const statsMatch = pathname.match(/^\/stats\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{20,80})$/);
     if (req.method === 'GET' && statsMatch) return htmlResponse(res, 200, statsPage(statsMatch[1], statsMatch[2]));
-    if (req.method === 'GET' && (pathname.startsWith('/s/') || pathname.startsWith('/go/'))) {
+    if ((req.method === 'GET' || req.method === 'HEAD') && (pathname.startsWith('/s/') || pathname.startsWith('/go/'))) {
       const alias = pathname.slice(1);
       const link = await findLink(alias);
-      return link ? htmlResponse(res, 200, linkVisitPage(link)) : notFound(res);
+      return link ? redirectToLink(req, res, link) : notFound(res);
     }
     return notFound(res);
   } catch (error) {

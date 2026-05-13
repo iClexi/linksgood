@@ -14,7 +14,7 @@ const formatDate = (value) => new Date(value).toLocaleString();
 
 const renderVisits = (visits) => {
   if (!visits.length) {
-    visitsEl.innerHTML = '<p class="empty">Todavía no hay visitas consentidas.</p>';
+    visitsEl.innerHTML = '<p class="empty">Todavía no hay visitas registradas.</p>';
     return;
   }
   visitsEl.innerHTML = `<table>
