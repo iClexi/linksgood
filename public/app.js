@@ -12,6 +12,9 @@ const statsUrl = document.getElementById('stats-url');
 const copyLink = document.getElementById('copy-link');
 const loadPreview = document.getElementById('load-preview');
 const samplePath = document.getElementById('sample-path');
+const sampleHost = document.getElementById('sample-host');
+const sampleTitle = document.getElementById('sample-title');
+const sampleDescription = document.getElementById('sample-description');
 const adminLink = document.getElementById('admin-link');
 const modeButtons = [...document.querySelectorAll('.mode')];
 
@@ -49,6 +52,29 @@ const tryAdminShortcut = async (value) => {
   return false;
 };
 
+const updateSamplePath = () => {
+  if (!samplePath) return;
+  const alias = customAlias.value.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!alias) {
+    samplePath.textContent = mode === 'short' ? '/s/7kP9xQ2' : '/go/root/kernel/payload';
+    return;
+  }
+  samplePath.textContent = mode === 'short' ? `/s/${alias}` : `/go/${alias}`;
+};
+
+const updateSamplePreview = () => {
+  if (!sampleHost || !sampleTitle || !sampleDescription) return;
+  try {
+    const url = new URL(targetInput.value.trim());
+    sampleHost.textContent = url.hostname.replace(/^www\./, '') || 'linksgood';
+  } catch {
+    sampleHost.textContent = 'linksgood';
+  }
+  sampleTitle.textContent = metaTitle.value.trim() || 'Preview social editable';
+  sampleDescription.textContent = metaDescription.value.trim() || 'Título, descripción e imagen quedan definidos por el creador del enlace.';
+  updateSamplePath();
+};
+
 fetch('/api/admin-eligible', { credentials: 'same-origin' })
   .then((response) => response.ok ? response.json() : { eligible: false })
   .then((data) => {
@@ -61,7 +87,7 @@ modeButtons.forEach((button) => {
     mode = button.dataset.mode;
     modeButtons.forEach((item) => item.classList.toggle('active', item === button));
     customAlias.placeholder = mode === 'short' ? 'mi-link' : 'root/kernel/payload';
-    samplePath.textContent = mode === 'short' ? '/s/7kP9xQ2' : '/go/root/kernel/payload';
+    updateSamplePath();
   });
 });
 
@@ -85,12 +111,17 @@ loadPreview?.addEventListener('click', async () => {
     metaTitle.value = data.preview.title || '';
     metaDescription.value = data.preview.description || '';
     metaImage.value = data.preview.image || '';
+    updateSamplePreview();
     setStatus('Preview cargada.', 'success');
   } catch (error) {
     setStatus(error.message || 'No se pudo cargar la preview.', 'error');
   } finally {
     loadPreview.disabled = false;
   }
+});
+
+[targetInput, customAlias, metaTitle, metaDescription].forEach((input) => {
+  input?.addEventListener('input', updateSamplePreview);
 });
 
 form?.addEventListener('submit', async (event) => {

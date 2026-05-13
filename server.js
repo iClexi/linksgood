@@ -14,6 +14,7 @@ const DATABASE_URL = process.env.LINKS_DATABASE_URL || '';
 const APP_SECRET = process.env.LINKS_APP_SECRET || '';
 const ADMIN_SECRET = (process.env.LINKS_ADMIN_ENTRY_SECRET || '').trim();
 const ADMIN_COOKIE = 'linksgood_admin';
+const ASSET_VERSION = '20260513-redesign';
 const ADMIN_TTL_SECONDS = Math.max(300, Number.parseInt(process.env.LINKS_ADMIN_SESSION_TTL_SECONDS || '21600', 10));
 const ADMIN_IP = process.env.LINKS_ADMIN_IP || '192.168.200.1';
 const RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.LINKS_RETENTION_DAYS || '90', 10));
@@ -273,7 +274,7 @@ function pageShell({ title, description = '', body, scripts = '', head = '' }) {
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeAttr(description || 'Acorta, alarga y administra enlaces con analítica transparente.')}" />
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/styles.css?v=${ASSET_VERSION}">
   ${head}
 </head>
 <body>
@@ -286,76 +287,94 @@ ${scripts}
 function appPage() {
   return pageShell({
     title: 'Linksgood',
-    body: `<main class="app-shell">
-  <section class="tool">
-    <div class="brand-row">
-      <a class="brand" href="/">Linksgood</a>
-      <a id="admin-link" class="ghost hidden" href="/admin">Admin</a>
+    body: `<main class="app-page">
+  <nav class="topbar">
+    <a class="brand" href="/" aria-label="Linksgood inicio"><span class="brand-mark">LG</span><span>Linksgood</span></a>
+    <div class="nav-actions">
+      <a class="nav-link" href="/terminos">Términos</a>
+      <a class="nav-link" href="/privacidad">Privacidad</a>
+      <a id="admin-link" class="nav-link admin-entry hidden" href="/admin">Admin</a>
     </div>
-    <form id="link-form" class="creator" autocomplete="off">
-      <label class="field primary-field">
-        <span>Enlace</span>
-        <input id="target-url" name="target" type="text" inputmode="url" placeholder="https://youtube.com/watch?v=..." required>
-      </label>
-      <div class="mode-row" role="tablist" aria-label="Modo">
-        <button class="mode active" type="button" data-mode="short">Corto</button>
-        <button class="mode" type="button" data-mode="long">Largo</button>
+  </nav>
+  <section class="studio-grid">
+    <section class="workbench">
+      <div class="workbench-title">
+        <span class="eyebrow">Acortador + alargador</span>
+        <h1>Convierte cualquier URL en un enlace con carácter.</h1>
       </div>
-      <div class="grid two">
-        <label class="field">
-          <span>Alias opcional</span>
-          <input id="custom-alias" type="text" placeholder="mi-link">
+      <form id="link-form" class="creator" autocomplete="off">
+        <label class="field primary-field">
+          <span>Link destino</span>
+          <input id="target-url" name="target" type="text" inputmode="url" placeholder="https://youtube.com/watch?v=..." required>
         </label>
-        <label class="field">
-          <span>Etiqueta privada</span>
-          <input id="owner-label" type="text" placeholder="campaña, clase, broma">
-        </label>
-      </div>
-      <details class="preview-editor">
-        <summary>Preview social</summary>
+        <div class="mode-row" role="tablist" aria-label="Modo">
+          <button class="mode active" type="button" data-mode="short"><span>Corto</span><small>/s/9Kx2</small></button>
+          <button class="mode" type="button" data-mode="long"><span>Largo</span><small>/go/root/kernel</small></button>
+        </div>
         <div class="grid two">
           <label class="field">
-            <span>Título</span>
-            <input id="meta-title" type="text" maxlength="140">
+            <span>Alias</span>
+            <input id="custom-alias" type="text" placeholder="mi-link">
           </label>
           <label class="field">
-            <span>Imagen</span>
-            <input id="meta-image" type="url" placeholder="https://...">
+            <span>Etiqueta privada</span>
+            <input id="owner-label" type="text" placeholder="campaña, clase, prueba">
           </label>
         </div>
-        <label class="field">
-          <span>Descripción</span>
-          <textarea id="meta-description" maxlength="240"></textarea>
-        </label>
-        <button id="load-preview" class="secondary" type="button">Cargar preview del destino</button>
-      </details>
-      <div class="actions">
-        <button id="submit" class="button" type="submit">Crear enlace</button>
-        <p id="status" class="status" role="status"></p>
-      </div>
-    </form>
-    <section id="result" class="result hidden" aria-live="polite">
-      <div>
+        <details class="preview-editor">
+          <summary><span>Preview social</span><small>título, descripción e imagen</small></summary>
+          <div class="grid two">
+            <label class="field">
+              <span>Título</span>
+              <input id="meta-title" type="text" maxlength="140">
+            </label>
+            <label class="field">
+              <span>Imagen</span>
+              <input id="meta-image" type="url" placeholder="https://...">
+            </label>
+          </div>
+          <label class="field">
+            <span>Descripción</span>
+            <textarea id="meta-description" maxlength="240"></textarea>
+          </label>
+          <button id="load-preview" class="secondary" type="button">Cargar preview</button>
+        </details>
+        <div class="actions">
+          <button id="submit" class="button" type="submit">Crear enlace</button>
+          <p id="status" class="status" role="status"></p>
+        </div>
+      </form>
+      <section id="result" class="result hidden" aria-live="polite">
         <span class="eyebrow">Enlace listo</span>
         <a id="result-url" class="result-link" href="#" target="_blank" rel="noreferrer"></a>
-      </div>
-      <div class="result-actions">
-        <button id="copy-link" class="secondary" type="button">Copiar link</button>
-        <a id="stats-url" class="secondary" href="#">Ver actividad</a>
-      </div>
+        <div class="result-actions">
+          <button id="copy-link" class="secondary" type="button">Copiar</button>
+          <a id="stats-url" class="secondary" href="#">Actividad</a>
+        </div>
+      </section>
     </section>
+    <aside class="signal-panel" aria-label="Vista visual de enlace">
+      <div class="signal-header">
+        <span class="eyebrow">Salida</span>
+        <strong id="sample-path">/s/7kP9xQ2</strong>
+      </div>
+      <img class="signal-art" src="/assets/link-map.svg" alt="">
+      <div class="social-preview" aria-label="Preview social de ejemplo">
+        <div class="preview-image"></div>
+        <div>
+          <span id="sample-host" class="preview-host">linksgood</span>
+          <strong id="sample-title">Preview social editable</strong>
+          <p id="sample-description">Título, descripción e imagen quedan definidos por el creador del enlace.</p>
+        </div>
+      </div>
+      <div class="audit-strip">
+        <span>Visita con aviso</span>
+        <strong>IP y navegador se muestran sólo tras consentimiento.</strong>
+      </div>
+    </aside>
   </section>
-  <aside class="side-panel">
-    <div class="metric"><strong id="sample-path">/s/7kP9xQ2</strong><span>Modo corto</span></div>
-    <div class="metric"><strong>/go/root/kernel/payload</strong><span>Modo largo</span></div>
-    <div class="notice">
-      <h2>Analítica con aviso</h2>
-      <p>Los visitantes ven una pantalla de consentimiento antes de que se guarde IP, navegador, referrer y datos técnicos.</p>
-    </div>
-  </aside>
-</main>
-<footer class="footer"><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>`,
-    scripts: '<script src="/assets/app.js" type="module"></script>',
+</main>`,
+    scripts: `<script src="/assets/app.js?v=${ASSET_VERSION}" type="module"></script>`,
   });
 }
 
@@ -363,17 +382,20 @@ function legalPage(kind) {
   const isTerms = kind === 'terms';
   return pageShell({
     title: isTerms ? 'Términos - Linksgood' : 'Privacidad - Linksgood',
-    body: `<main class="doc">
-  <a class="brand" href="/">Linksgood</a>
-  <h1>${isTerms ? 'Términos y condiciones' : 'Privacidad'}</h1>
-  <p>Linksgood crea enlaces cortos o largos con una pantalla intermedia de consentimiento. El servicio no debe usarse para acoso, phishing, robo de credenciales, engaño, doxxing ni rastreo encubierto.</p>
-  <p>Cuando una persona abre un enlace, primero ve un aviso. Si decide continuar, se registra una visita asociada al enlace para que su creador pueda verla.</p>
-  <h2>Datos que puede registrar una visita consentida</h2>
-  <p>IP pública recibida por el servidor, fecha, user-agent, idioma, referrer, viewport, pantalla, zona horaria y otros datos técnicos enviados por el navegador.</p>
-  <h2>Responsabilidad del usuario</h2>
-  <p>Quien crea un enlace debe usarlo de forma transparente, proporcional y legal. No se permite presentarlo como una herramienta de captura secreta.</p>
-  <h2>Retención</h2>
-  <p>La retención operativa por defecto es de ${RETENTION_DAYS} días, salvo ajustes administrativos. Este texto es informativo y no sustituye asesoría legal profesional.</p>
+    body: `<main class="doc-page">
+  <nav class="topbar compact"><a class="brand" href="/"><span class="brand-mark">lg</span><span>Linksgood</span></a></nav>
+  <article class="doc">
+    <span class="eyebrow">Legal</span>
+    <h1>${isTerms ? 'Términos y condiciones' : 'Privacidad'}</h1>
+    <p>Linksgood crea enlaces cortos o largos con una pantalla intermedia de consentimiento. El servicio no debe usarse para acoso, phishing, robo de credenciales, engaño, doxxing ni rastreo encubierto.</p>
+    <p>Cuando una persona abre un enlace, primero ve un aviso. Si decide continuar, se registra una visita asociada al enlace para que su creador pueda verla.</p>
+    <h2>Datos que puede registrar una visita consentida</h2>
+    <p>IP pública recibida por el servidor, fecha, user-agent, idioma, referrer, viewport, pantalla, zona horaria y otros datos técnicos enviados por el navegador.</p>
+    <h2>Responsabilidad del usuario</h2>
+    <p>Quien crea un enlace debe usarlo de forma transparente, proporcional y legal. No se permite presentarlo como una herramienta de captura secreta.</p>
+    <h2>Retención</h2>
+    <p>La retención operativa por defecto es de ${RETENTION_DAYS} días, salvo ajustes administrativos. Este texto es informativo y no sustituye asesoría legal profesional.</p>
+  </article>
 </main>`,
   });
 }
@@ -393,21 +415,24 @@ function linkVisitPage(link) {
     title,
     description,
     head,
-    body: `<main class="consent">
+    body: `<main class="consent-page">
   <section class="consent-box">
-    <span class="eyebrow">Linksgood</span>
-    <h1>${escapeHtml(title)}</h1>
-    <p>${escapeHtml(description)}</p>
-    <div class="destination">${escapeHtml(link.target_host)}</div>
-    <div class="consent-copy">
-      <strong>Antes de continuar</strong>
-      <span>Si aceptas, este enlace registrará IP pública, navegador, referrer, idioma, viewport, zona horaria y hora de acceso para el creador del enlace y el administrador.</span>
+    <div class="consent-media">${image ? `<img src="${escapeAttr(image)}" alt="">` : '<img src="/assets/link-map.svg" alt="">'} </div>
+    <div class="consent-body">
+      <span class="eyebrow">Salida externa</span>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(description)}</p>
+      <div class="destination">${escapeHtml(link.target_host)}</div>
+      <div class="consent-copy">
+        <strong>Antes de continuar</strong>
+        <span>Si aceptas, este enlace registrará IP pública, navegador, referrer, idioma, viewport, zona horaria y hora de acceso para el creador del enlace y el administrador.</span>
+      </div>
+      <div class="actions">
+        <button id="continue" class="button" type="button">Aceptar y continuar</button>
+        <a class="secondary" href="/">Cancelar</a>
+      </div>
+      <p id="visit-status" class="status"></p>
     </div>
-    <div class="actions">
-      <button id="continue" class="button" type="button">Aceptar y continuar</button>
-      <a class="secondary" href="/">Cancelar</a>
-    </div>
-    <p id="visit-status" class="status"></p>
   </section>
 </main>`,
     scripts: `<script>window.LINKSGOOD_VISIT=${jsonScript({ id: link.id })}</script><script src="/assets/visit.js" type="module"></script>`,
@@ -418,14 +443,14 @@ function statsPage(id, key) {
   return pageShell({
     title: 'Actividad del enlace - Linksgood',
     body: `<main class="dashboard">
-  <div class="brand-row"><a class="brand" href="/">Linksgood</a><a class="ghost" href="/">Crear</a></div>
-  <section class="panel">
+  <nav class="topbar compact"><a class="brand" href="/"><span class="brand-mark">lg</span><span>Linksgood</span></a><a class="nav-link" href="/">Crear</a></nav>
+  <section class="panel lead-panel">
     <span class="eyebrow">Actividad</span>
     <h1 id="stats-title">Cargando...</h1>
     <div id="stats-summary" class="summary-grid"></div>
   </section>
   <section class="panel">
-    <h2>Visitas consentidas</h2>
+    <div class="panel-heading"><h2>Visitas consentidas</h2></div>
     <div id="visits" class="table-wrap"></div>
   </section>
 </main>`,
@@ -437,18 +462,18 @@ function adminPage() {
   return pageShell({
     title: 'Admin - Linksgood',
     body: `<main class="dashboard">
-  <div class="brand-row"><a class="brand" href="/">Linksgood</a><span class="ghost">Admin</span></div>
-  <section class="panel">
+  <nav class="topbar compact"><a class="brand" href="/"><span class="brand-mark">lg</span><span>Linksgood</span></a><span class="nav-link active">Admin</span></nav>
+  <section class="panel lead-panel">
     <span class="eyebrow">Control</span>
     <h1>Panel admin</h1>
     <div id="admin-summary" class="summary-grid"></div>
   </section>
   <section class="panel">
-    <h2>Enlaces recientes</h2>
+    <div class="panel-heading"><h2>Enlaces recientes</h2></div>
     <div id="admin-links" class="table-wrap"></div>
   </section>
   <section class="panel">
-    <h2>Visitas recientes</h2>
+    <div class="panel-heading"><h2>Visitas recientes</h2></div>
     <div id="admin-visits" class="table-wrap"></div>
   </section>
 </main>`,
