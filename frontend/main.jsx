@@ -1,18 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { animate, createScope, stagger } from 'animejs';
 import {
   ArrowRight,
   BarChart3,
   Copy,
   ExternalLink,
+  Gauge,
+  Globe2,
   Link2,
   LockKeyhole,
+  MousePointerClick,
+  Radio,
+  Route,
   ScanSearch,
+  ShieldCheck,
   Sparkles,
+  WandSparkles,
 } from 'lucide-react';
 import './styles.css';
 
 const YOUTUBE_RE = /^(https?:\/\/)?((www|m|music)\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]{6,}/i;
+
+const prefersReducedMotion = () => (
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+);
 
 const parseJson = async (response) => {
   try {
@@ -46,6 +59,7 @@ const safeImageUrl = (value) => {
 };
 
 function App() {
+  const shellRef = useRef(null);
   const [mode, setMode] = useState('short');
   const [targetUrl, setTargetUrl] = useState('');
   const [customAlias, setCustomAlias] = useState('');
@@ -62,7 +76,7 @@ function App() {
 
   const aliasPath = useMemo(() => {
     const alias = customAlias.trim().replace(/^\/+/, '').replace(/\/+$/, '');
-    if (!alias) return mode === 'short' ? '/s/9Kx2' : '/go/root/kernel/payload';
+    if (!alias) return mode === 'short' ? '/s/neon' : '/go/root/kernel/payload';
     return `${mode === 'short' ? '/s' : '/go'}/${alias}`;
   }, [customAlias, mode]);
 
@@ -77,6 +91,63 @@ function App() {
       .then((data) => setAdminEligible(Boolean(data.eligible)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!shellRef.current || prefersReducedMotion()) return undefined;
+    const scope = createScope({ root: shellRef }).add(() => {
+      animate('.motion-rise', {
+        opacity: [0, 1],
+        translateY: [24, 0],
+        duration: 780,
+        delay: stagger(70),
+        ease: 'outCubic',
+      });
+      animate('.flow-chip', {
+        translateY: [0, -5, 0],
+        duration: 2600,
+        delay: stagger(190),
+        loop: true,
+        ease: 'inOutSine',
+      });
+      animate('.signal-line', {
+        translateX: ['-45%', '125%'],
+        opacity: [0.2, 0.85, 0.2],
+        duration: 2800,
+        loop: true,
+        ease: 'linear',
+      });
+    });
+    return () => scope.revert();
+  }, []);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    animate('.mode-switch .active', {
+      scale: [0.98, 1],
+      duration: 320,
+      ease: 'outBack',
+    });
+  }, [mode]);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    animate('.browser-preview', {
+      scale: [0.985, 1],
+      duration: 380,
+      ease: 'outCubic',
+    });
+  }, [host, socialTitle, socialDescription, socialImage]);
+
+  useEffect(() => {
+    if (!result || prefersReducedMotion()) return;
+    animate('#result', {
+      opacity: [0, 1],
+      translateY: [14, 0],
+      scale: [0.98, 1],
+      duration: 520,
+      ease: 'outBack',
+    });
+  }, [result]);
 
   const setMessage = (message, type = '') => setStatus({ message, type });
 
@@ -172,8 +243,15 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
-      <aside className="rail" aria-label="Navegacion principal">
+    <div className="app-shell" ref={shellRef}>
+      <div className="ambient-grid" aria-hidden="true"></div>
+      <div className="beam-layer" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+
+      <header className="top-nav motion-rise">
         <a className="brand" href="/" aria-label="Linksgood inicio">
           <span className="brand-mark">LG</span>
           <span>
@@ -189,23 +267,27 @@ function App() {
         </nav>
 
         <div className="rail-status">
-          <LockKeyhole aria-hidden="true" size={18} />
-          <span>Redirect directo</span>
+          <LockKeyhole aria-hidden="true" size={17} />
+          <span>302 directo</span>
         </div>
-      </aside>
+      </header>
 
-      <main className="desk">
-        <section className="compose" aria-label="Crear enlace">
+      <main className="studio-grid">
+        <section className="compose motion-rise" aria-label="Crear enlace">
           <div className="desk-heading">
-            <span>Crear enlace</span>
-            <h1>Acorta o alarga links.</h1>
+            <div className="eyebrow-row">
+              <span className="flow-chip"><Sparkles aria-hidden="true" size={15} /> Studio</span>
+              <span className="flow-chip"><ShieldCheck aria-hidden="true" size={15} /> Visible</span>
+              <span className="flow-chip"><Gauge aria-hidden="true" size={15} /> Rapido</span>
+            </div>
+            <h1>Acorta, alarga y maquilla links.</h1>
           </div>
 
           <form id="link-form" className="builder" onSubmit={createLink} data-state={status.type || (status.message ? 'busy' : 'idle')}>
             <label className="target-field">
               <span>Destino</span>
               <div className="target-control">
-                <Link2 aria-hidden="true" size={22} />
+                <Link2 aria-hidden="true" size={24} />
                 <input
                   id="target-url"
                   name="target"
@@ -216,17 +298,22 @@ function App() {
                   onChange={(event) => setTargetUrl(event.target.value)}
                   required
                 />
+                <button className="mini-action" id="load-preview" type="button" onClick={loadPreview} disabled={previewBusy} aria-label="Detectar preview">
+                  <ScanSearch aria-hidden="true" size={19} />
+                </button>
               </div>
             </label>
 
             <div className="mode-switch" role="tablist" aria-label="Modo">
               <button className={mode === 'short' ? 'active' : ''} type="button" aria-pressed={mode === 'short'} onClick={() => setMode('short')}>
+                <MousePointerClick aria-hidden="true" size={19} />
                 <span>Corto</span>
-                <small>/s/9Kx2</small>
+                <small>/s/neon</small>
               </button>
               <button className={mode === 'long' ? 'active' : ''} type="button" aria-pressed={mode === 'long'} onClick={() => setMode('long')}>
+                <Route aria-hidden="true" size={19} />
                 <span>Largo</span>
-                <small>/go/root/kernel/payload</small>
+                <small>/go/root/kernel</small>
               </button>
             </div>
 
@@ -243,8 +330,8 @@ function App() {
 
             <details className="metadata">
               <summary>
-                <Sparkles aria-hidden="true" size={18} />
-                <span>Preview social</span>
+                <WandSparkles aria-hidden="true" size={18} />
+                <span>Preview social editable</span>
               </summary>
               <div className="field-row">
                 <label>
@@ -260,10 +347,6 @@ function App() {
                 <span>Descripcion</span>
                 <textarea id="meta-description" maxLength={240} value={metaDescription} onChange={(event) => setMetaDescription(event.target.value)} />
               </label>
-              <button className="ghost-button" id="load-preview" type="button" onClick={loadPreview} disabled={previewBusy}>
-                <ScanSearch aria-hidden="true" size={18} />
-                {previewBusy ? 'Detectando...' : 'Detectar preview'}
-              </button>
             </details>
 
             <div className="form-actions">
@@ -284,34 +367,37 @@ function App() {
             </div>
           </section>
         </section>
-      </main>
 
-      <aside className="inspector" aria-label="Vista previa">
-        <div className="output-panel">
-          <span>Salida</span>
-          <strong id="sample-path">{aliasPath}</strong>
-          <small>302 directo</small>
-        </div>
+        <aside className="inspector motion-rise" aria-label="Vista previa">
+          <div className="output-panel">
+            <span>Ruta viva</span>
+            <strong id="sample-path">{aliasPath}</strong>
+            <small><Radio aria-hidden="true" size={15} /> redirect sin pausa</small>
+            <div className="signal-track" aria-hidden="true"><span className="signal-line"></span></div>
+          </div>
 
-        <div className="browser-preview">
-          <div className="browser-top"><span></span><span></span><span></span></div>
-          <div className="browser-body">
-            <div id="sample-thumb" className="thumb" style={socialImage ? { backgroundImage: `url("${socialImage}")` } : undefined}></div>
-            <div>
-              <span id="sample-host">{host === 'sin destino' ? 'linksgood' : host}</span>
-              <strong id="sample-title">{socialTitle}</strong>
-              <p id="sample-description">{socialDescription}</p>
+          <div className="browser-preview">
+            <div className="browser-top"><span></span><span></span><span></span></div>
+            <div className="browser-body">
+              <div id="sample-thumb" className="thumb" style={socialImage ? { backgroundImage: `url("${socialImage}")` } : undefined}>
+                {!socialImage ? <img className="map-asset" src="/assets/link-map.svg" alt="" /> : null}
+              </div>
+              <div>
+                <span id="sample-host"><Globe2 aria-hidden="true" size={14} /> {host === 'sin destino' ? 'linksgood' : host}</span>
+                <strong id="sample-title">{socialTitle}</strong>
+                <p id="sample-description">{socialDescription}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <dl className="inspect-list">
-          <div><dt>Modo</dt><dd id="sample-mode">{mode === 'short' ? 'Corto' : 'Largo'}</dd></div>
-          <div><dt>Destino</dt><dd id="sample-destination">{host}</dd></div>
-          <div><dt>Registro</dt><dd>IP, user-agent, referrer, idioma</dd></div>
-          <div><dt>Accion</dt><dd><ExternalLink aria-hidden="true" size={15} /> redirect</dd></div>
-        </dl>
-      </aside>
+          <dl className="inspect-list">
+            <div><dt>Modo</dt><dd id="sample-mode">{mode === 'short' ? 'Corto' : 'Largo'}</dd></div>
+            <div><dt>Destino</dt><dd id="sample-destination">{host}</dd></div>
+            <div><dt>Registro</dt><dd>IP, user-agent, referrer, idioma</dd></div>
+            <div><dt>Accion</dt><dd><ExternalLink aria-hidden="true" size={15} /> redirect</dd></div>
+          </dl>
+        </aside>
+      </main>
     </div>
   );
 }
