@@ -4,13 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:frontend": "vite build",
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check public/admin.js && node --check public/stats.js"
+    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && npm run build:frontend"
   },
   "dependencies": {
-    "pg": "^8.13.1"
+    "lucide-react": "^1.14.0",
+    "pg": "^8.13.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.12"
   }
 }
