@@ -14,7 +14,7 @@ const DATABASE_URL = process.env.LINKS_DATABASE_URL || '';
 const APP_SECRET = process.env.LINKS_APP_SECRET || '';
 const ADMIN_SECRET = (process.env.LINKS_ADMIN_ENTRY_SECRET || '').trim();
 const ADMIN_COOKIE = 'linksgood_admin';
-const ASSET_VERSION = '20260513-front2';
+const ASSET_VERSION = '20260514-rebuild2';
 const ADMIN_TTL_SECONDS = Math.max(300, Number.parseInt(process.env.LINKS_ADMIN_SESSION_TTL_SECONDS || '21600', 10));
 const ADMIN_IP = process.env.LINKS_ADMIN_IP || '192.168.200.1';
 const RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.LINKS_RETENTION_DAYS || '90', 10));
@@ -287,31 +287,47 @@ ${scripts}
 function appPage() {
   return pageShell({
     title: 'Linksgood',
-    body: `<main class="app-page">
-  <nav class="topbar">
-    <a class="brand" href="/" aria-label="Linksgood inicio"><span class="brand-mark">LG</span><span>Linksgood</span><span class="brand-mode">Direct</span></a>
+    body: `<main class="linklab">
+  <nav class="lab-nav">
+    <a class="brand" href="/" aria-label="Linksgood inicio">
+      <span class="brand-mark">L</span>
+      <span>
+        <strong>Linksgood</strong>
+        <small>short / long router</small>
+      </span>
+    </a>
     <div class="nav-actions">
-      <a class="nav-link" href="/terminos">Términos</a>
+      <a class="nav-link" href="/terminos">Legal</a>
       <a class="nav-link" href="/privacidad">Privacidad</a>
       <a id="admin-link" class="nav-link admin-entry hidden" href="/admin">Admin</a>
     </div>
   </nav>
-  <section class="studio-grid">
-    <section class="workbench">
-      <div class="workbench-title">
-        <span class="eyebrow">Link console</span>
-        <h1>Acorta, alarga y personaliza enlaces.</h1>
-      </div>
+
+  <section class="lab-grid">
+    <section class="creator-console" aria-label="Crear enlace">
+      <header class="console-head">
+        <span class="eyebrow">Crear ruta</span>
+        <h1>Un enlace limpio. O uno exageradamente largo.</h1>
+      </header>
+
       <form id="link-form" class="creator" autocomplete="off">
-        <label class="field primary-field">
-          <span>Link destino</span>
-          <input id="target-url" name="target" type="text" inputmode="url" placeholder="https://youtube.com/watch?v=..." required>
+        <label class="url-command">
+          <span>Destino</span>
+          <input id="target-url" name="target" type="text" inputmode="url" placeholder="pega tu link aqui" required>
         </label>
+
         <div class="mode-row" role="tablist" aria-label="Modo">
-          <button class="mode active" type="button" data-mode="short" aria-pressed="true"><span>Corto</span><small>/s/9Kx2</small></button>
-          <button class="mode" type="button" data-mode="long" aria-pressed="false"><span>Largo</span><small>/go/root/kernel</small></button>
+          <button class="mode active" type="button" data-mode="short" aria-pressed="true">
+            <span>Corto</span>
+            <small>/s/9Kx2</small>
+          </button>
+          <button class="mode" type="button" data-mode="long" aria-pressed="false">
+            <span>Largo hacker</span>
+            <small>/go/root/kernel</small>
+          </button>
         </div>
-        <div class="grid two">
+
+        <div class="field-grid">
           <label class="field">
             <span>Alias</span>
             <input id="custom-alias" type="text" placeholder="mi-link">
@@ -321,9 +337,13 @@ function appPage() {
             <input id="owner-label" type="text" placeholder="campaña, clase, prueba">
           </label>
         </div>
+
         <details class="preview-editor">
-          <summary><span>Preview social</span><small>título, descripción e imagen</small></summary>
-          <div class="grid two">
+          <summary>
+            <span>Tarjeta social</span>
+            <small>titulo, descripcion e imagen</small>
+          </summary>
+          <div class="field-grid">
             <label class="field">
               <span>Título</span>
               <input id="meta-title" type="text" maxlength="140">
@@ -337,13 +357,15 @@ function appPage() {
             <span>Descripción</span>
             <textarea id="meta-description" maxlength="240"></textarea>
           </label>
-          <button id="load-preview" class="secondary" type="button">Cargar preview</button>
+          <button id="load-preview" class="secondary" type="button">Detectar preview</button>
         </details>
+
         <div class="actions">
-          <button id="submit" class="button" type="submit">Crear enlace</button>
+          <button id="submit" class="button" type="submit">Generar</button>
           <p id="status" class="status" role="status"></p>
         </div>
       </form>
+
       <section id="result" class="result hidden" aria-live="polite">
         <span class="eyebrow">Enlace listo</span>
         <a id="result-url" class="result-link" href="#" target="_blank" rel="noreferrer"></a>
@@ -353,24 +375,30 @@ function appPage() {
         </div>
       </section>
     </section>
-    <aside class="signal-panel" aria-label="Vista visual de enlace">
-      <div class="signal-header">
-        <span class="eyebrow">Salida</span>
+
+    <aside class="preview-console" aria-label="Previsualizacion de enlace">
+      <div class="route-card">
+        <span class="eyebrow">Salida directa</span>
         <strong id="sample-path">/s/7kP9xQ2</strong>
-        <small>302 directo</small>
+        <small>302 redirect sin pantalla intermedia</small>
       </div>
-      <img class="signal-art" src="/assets/link-map.svg" alt="">
+
       <div class="social-preview" aria-label="Preview social de ejemplo">
-        <div id="sample-thumb" class="preview-image"></div>
-        <div>
-          <span id="sample-host" class="preview-host">linksgood</span>
-          <strong id="sample-title">Preview social editable</strong>
-          <p id="sample-description">Título, descripción e imagen quedan definidos por el creador del enlace.</p>
+        <div class="browser-bar"><span></span><span></span><span></span></div>
+        <div class="preview-body">
+          <div id="sample-thumb" class="preview-image"></div>
+          <div>
+            <span id="sample-host" class="preview-host">linksgood</span>
+            <strong id="sample-title">Preview social editable</strong>
+            <p id="sample-description">Título, descripción e imagen quedan definidos por el creador del enlace.</p>
+          </div>
         </div>
       </div>
-      <div class="audit-strip">
-        <span>Actividad</span>
-        <strong>IP, user-agent, referrer e idioma en términos.</strong>
+
+      <div class="signal-stack" aria-label="Estado del enlace">
+        <div><span>Modo</span><strong id="sample-mode">Corto</strong></div>
+        <div><span>Destino</span><strong id="sample-destination">Sin link</strong></div>
+        <div><span>Actividad</span><strong>Basica, en terminos</strong></div>
       </div>
     </aside>
   </section>
