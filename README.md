@@ -14,10 +14,14 @@ Acortador, alargador y generador QR para `links.iclexi.tech`.
 
 ```bash
 npm install
+npm run build
 LINKS_DATABASE_URL=postgresql://... npm start
 ```
 
 Puerto por defecto: `9827`.
+
+El frontend vive en `frontend/main.tsx` y el backend en `server.ts`. `npm start`
+ejecuta el backend compilado en `dist/server.js`.
 
 ## Variables
 

@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "tsc -p tsconfig.server.json",
     "build:frontend": "vite build",
-    "start": "node server.js",
-    "typecheck": "tsc --noEmit",
-    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && node --check public/account.js && npm run typecheck && npm run build:frontend"
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "check": "node --check public/admin.js && node --check public/stats.js && node --check public/account.js && npm run typecheck && npm run build && node --check dist/server.js"
   },
   "dependencies": {
     "animejs": "^4.4.1",
@@ -21,6 +23,9 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@types/node": "^25.8.0",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

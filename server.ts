@@ -1,5 +1,6 @@
 import { createHmac, pbkdf2Sync, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import { Pool } from 'pg';
 import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const APP_ROOT = path.resolve(__dirname, '..');
 const PORT = Number.parseInt(process.env.LINKS_PORT || '9827', 10);
 const PUBLIC_URL = (process.env.LINKS_PUBLIC_URL || `http://127.0.0.1:${PORT}`).replace(/\/+$/, '');
 const DATABASE_URL = process.env.LINKS_DATABASE_URL || '';
@@ -34,7 +36,48 @@ if (!APP_SECRET || APP_SECRET.length < 24) {
 
 const pool = new Pool({ connectionString: DATABASE_URL, max: 8, idleTimeoutMillis: 30000 });
 
-const mimeTypes = new Map([
+type Response = ServerResponse<IncomingMessage>;
+type Headers = Record<string, string>;
+type CookieMap = Record<string, string>;
+type LinkMode = 'short' | 'long';
+type QrFormat = 'svg' | 'png';
+type LegalKind = 'terms' | 'privacy';
+
+interface PublicUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  created_at?: string;
+}
+
+interface AuthContext {
+  session_id: string;
+  user: PublicUser;
+}
+
+interface LinkRow {
+  id: string;
+  alias_path: string;
+  mode: LinkMode;
+  target_url: string;
+  target_host: string;
+  owner_label?: string;
+  meta_title?: string;
+  meta_description?: string;
+  meta_image?: string;
+  clicks?: number;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+interface MetadataPreview {
+  title?: string;
+  description?: string;
+  image?: string;
+}
+
+const mimeTypes = new Map<string, string>([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.svg', 'image/svg+xml'],
@@ -53,11 +96,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function hmac(value) {
+function hmac(value: string) {
   return createHmac('sha256', APP_SECRET).update(value).digest('hex');
 }
 
-function jsonResponse(res, status, data, headers = {}) {
+function jsonResponse(res: Response, status: number, data: unknown, headers: Headers = {}) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -67,7 +110,7 @@ function jsonResponse(res, status, data, headers = {}) {
   res.end(body);
 }
 
-function htmlResponse(res, status, html, headers = {}) {
+function htmlResponse(res: Response, status: number, html: string, headers: Headers = {}) {
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store',
@@ -76,26 +119,26 @@ function htmlResponse(res, status, html, headers = {}) {
   res.end(html);
 }
 
-function redirect(res, location) {
+function redirect(res: Response, location: string) {
   res.writeHead(302, { location, 'cache-control': 'no-store' });
   res.end();
 }
 
-function notFound(res) {
+function notFound(res: Response) {
   htmlResponse(res, 404, pageShell({ title: 'No encontrado', body: '<main class="center"><h1>No encontrado</h1><p>Ese enlace no existe o fue desactivado.</p><a class="button" href="/">Crear otro enlace</a></main>' }));
 }
 
-function badRequest(res, message) {
+function badRequest(res: Response, message: string) {
   jsonResponse(res, 400, { error: message });
 }
 
-function validationError(message) {
-  const error = new Error(message);
+function validationError(message: string) {
+  const error = new Error(message) as Error & { code: string };
   error.code = 'VALIDATION_ERROR';
   return error;
 }
 
-function routeError(req, res, error) {
+function routeError(req: IncomingMessage, res: Response, error: Error & { code?: string; constraint?: string }) {
   if (res.headersSent) {
     console.error(error);
     res.destroy();
@@ -116,8 +159,8 @@ function routeError(req, res, error) {
   return jsonResponse(res, 500, { error: message.length < 180 ? message : 'Error interno.' });
 }
 
-function parseCookies(header = '') {
-  const cookies = {};
+function parseCookies(header = ''): CookieMap {
+  const cookies: CookieMap = {};
   for (const part of header.split(';')) {
     const index = part.indexOf('=');
     if (index === -1) continue;
@@ -128,49 +171,49 @@ function parseCookies(header = '') {
   return cookies;
 }
 
-function clientIp(req) {
-  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+function clientIp(req: IncomingMessage) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0]?.trim() || '';
   return xff || req.socket.remoteAddress || '';
 }
 
-function publicIp(req) {
+function publicIp(req: IncomingMessage) {
   return String(req.headers['cf-connecting-ip'] || '').trim() || clientIp(req);
 }
 
-function isSecureRequest(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+function isSecureRequest(req: IncomingMessage) {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim().toLowerCase() || '';
   return forwardedProto === 'https' || Boolean(req.headers['cf-ray']);
 }
 
-function setCookie(req, res, name, value, maxAge) {
+function setCookie(req: IncomingMessage, res: Response, name: string, value: string, maxAge: number) {
   const secure = isSecureRequest(req) ? '; Secure' : '';
   res.setHeader('set-cookie', `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`);
 }
 
-function clearCookie(res, name) {
+function clearCookie(res: Response, name: string) {
   res.setHeader('set-cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
 }
 
-function normalizeEmail(value) {
+function normalizeEmail(value: unknown) {
   return String(value || '').trim().toLowerCase();
 }
 
-function cleanUsername(value) {
+function cleanUsername(value: unknown) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
-function validatePassword(value) {
+function validatePassword(value: unknown) {
   const password = String(value || '');
   if (password.length < 8) throw validationError('La contraseña debe tener al menos 8 caracteres.');
   if (password.length > 200) throw validationError('La contraseña es demasiado larga.');
   return password;
 }
 
-function passwordDigest(password, salt, iterations = PASSWORD_ITERATIONS) {
+function passwordDigest(password: string, salt: string, iterations = PASSWORD_ITERATIONS) {
   return pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex');
 }
 
-function hashPassword(password) {
+function hashPassword(password: string) {
   const salt = randomBytes(18).toString('base64url');
   return {
     salt,
@@ -179,17 +222,17 @@ function hashPassword(password) {
   };
 }
 
-function compareDigest(a, b) {
+function compareDigest(a: string, b: string) {
   if (!a || !b || a.length !== b.length) return false;
   return hmac(`compare:${a}`) === hmac(`compare:${b}`);
 }
 
-function verifyPassword(password, user) {
+function verifyPassword(password: string, user) {
   const digest = passwordDigest(password, user.password_salt, Number(user.password_iterations || PASSWORD_ITERATIONS));
   return compareDigest(digest, user.password_hash);
 }
 
-function publicUser(row) {
+function publicUser(row): PublicUser | null {
   if (!row) return null;
   return {
     id: row.id,
@@ -216,11 +259,11 @@ function describeUserAgent(userAgent = '') {
   return `${browser} · ${os} · ${device}`;
 }
 
-function sessionTokenHash(token) {
+function sessionTokenHash(token: string) {
   return hmac(`session:${token}`);
 }
 
-async function createSession(req, res, user) {
+async function createSession(req: IncomingMessage, res: Response, user: PublicUser) {
   const token = randomBytes(32).toString('base64url');
   const session = {
     id: randomUUID(),
@@ -237,7 +280,7 @@ async function createSession(req, res, user) {
   return session.id;
 }
 
-async function currentAuth(req) {
+async function currentAuth(req: IncomingMessage): Promise<AuthContext | null> {
   const token = parseCookies(req.headers.cookie || '')[AUTH_COOKIE] || '';
   if (!token) return null;
   const result = await pool.query(
@@ -258,15 +301,15 @@ async function currentAuth(req) {
   ]).catch(() => {});
   return {
     session_id: row.session_id,
-    user: publicUser(row),
+    user: publicUser(row) as PublicUser,
   };
 }
 
-function isAdmin(auth) {
+function isAdmin(auth: AuthContext | null): auth is AuthContext {
   return auth?.user?.role === 'admin';
 }
 
-async function logUserEvent(auth, req, eventType, entityType = '', entityId = '', details = {}) {
+async function logUserEvent(auth: Pick<AuthContext, 'user'> | null, req: IncomingMessage, eventType: string, entityType = '', entityId = '', details: Record<string, unknown> = {}) {
   if (!auth?.user?.id) return;
   await pool.query(
     `INSERT INTO user_events (user_id, event_type, entity_type, entity_id, ip, user_agent, details)
@@ -283,23 +326,24 @@ async function logUserEvent(auth, req, eventType, entityType = '', entityId = ''
   ).catch(() => {});
 }
 
-async function readJson(req) {
+async function readJson(req: IncomingMessage): Promise<Record<string, any>> {
   let size = 0;
-  const chunks = [];
+  const chunks: Buffer[] = [];
   for await (const chunk of req) {
-    size += chunk.length;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
     if (size > MAX_BODY) throw new Error('BODY_TOO_LARGE');
-    chunks.push(chunk);
+    chunks.push(buffer);
   }
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function cleanText(value, max = 240) {
+function cleanText(value: unknown, max = 240) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-function parsePublicHttpUrl(value, message, baseUrl = '') {
+function parsePublicHttpUrl(value: unknown, message: string, baseUrl = ''): URL | null {
   const raw = String(value || '').trim();
   if (!raw) return null;
   const candidate = raw.startsWith('//') ? `https:${raw}` : raw;
@@ -316,7 +360,7 @@ function parsePublicHttpUrl(value, message, baseUrl = '') {
   return parsed;
 }
 
-async function cleanImageUrl(value, baseUrl = '') {
+async function cleanImageUrl(value: unknown, baseUrl = '') {
   const parsed = parsePublicHttpUrl(value, 'La imagen debe ser una URL pública http/https.', baseUrl);
   if (!parsed) return '';
   try {
@@ -327,7 +371,7 @@ async function cleanImageUrl(value, baseUrl = '') {
   return parsed.href;
 }
 
-function normalizeUrl(value) {
+function normalizeUrl(value: unknown) {
   let raw = String(value || '').trim();
   if (!raw) throw validationError('URL requerida.');
   if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
@@ -344,7 +388,7 @@ function normalizeUrl(value) {
   return parsed;
 }
 
-function isPrivateIp(address) {
+function isPrivateIp(address: string) {
   if (!address) return true;
   if (net.isIPv4(address)) {
     const parts = address.split('.').map((part) => Number.parseInt(part, 10));
@@ -364,7 +408,7 @@ function isPrivateIp(address) {
   return true;
 }
 
-async function assertPublicUrl(parsed) {
+async function assertPublicUrl(parsed: URL) {
   if (net.isIP(parsed.hostname)) {
     if (isPrivateIp(parsed.hostname)) throw validationError('No se permiten enlaces a redes privadas o locales.');
     return;
@@ -376,7 +420,7 @@ async function assertPublicUrl(parsed) {
   }
 }
 
-function sanitizeAlias(value, mode) {
+function sanitizeAlias(value: unknown, mode: LinkMode) {
   const raw = String(value || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
   if (!raw) return '';
   if (mode === 'short') {
@@ -394,23 +438,23 @@ function sanitizeAlias(value, mode) {
 function randomShortCode(size = 7) {
   let code = '';
   for (let i = 0; i < size; i += 1) {
-    code += shortAlphabet[randomBytes(1)[0] % shortAlphabet.length];
+    code += shortAlphabet[randomBytes(1)[0] % shortAlphabet.length] || 'x';
   }
   return code;
 }
 
 function randomLongPath() {
-  const segments = [];
+  const segments: string[] = [];
   const count = 5 + (randomBytes(1)[0] % 4);
   for (let i = 0; i < count; i += 1) {
-    const word = longWords[randomBytes(1)[0] % longWords.length];
+    const word = longWords[randomBytes(1)[0] % longWords.length] || 'link';
     const suffix = randomBytes(2).toString('hex');
     segments.push(i % 2 === 0 ? word : `${word}-${suffix}`);
   }
   return segments.join('/');
 }
 
-function escapeHtml(value) {
+function escapeHtml(value: unknown) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -419,11 +463,11 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function escapeAttr(value) {
+function escapeAttr(value: unknown) {
   return escapeHtml(value).replace(/`/g, '&#96;');
 }
 
-function isPreviewCrawler(req) {
+function isPreviewCrawler(req: IncomingMessage) {
   const ua = String(req.headers['user-agent'] || '').toLowerCase();
   if (!ua) return false;
   return [
@@ -449,11 +493,11 @@ function isPreviewCrawler(req) {
   ].some((token) => ua.includes(token));
 }
 
-function jsonScript(value) {
+function jsonScript(value: unknown) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
-function linkPreviewPage(link) {
+function linkPreviewPage(link: LinkRow) {
   const previewUrl = `${PUBLIC_URL}/${link.alias_path}`;
   const title = cleanText(link.meta_title || link.owner_label || link.target_host || BRAND_NAME, 140);
   const description = cleanText(link.meta_description || `Enlace creado con ${BRAND_NAME}.`, 240);
@@ -490,7 +534,7 @@ function linkPreviewPage(link) {
 </html>`;
 }
 
-function pageShell({ title, description = '', body, scripts = '', head = '' }) {
+function pageShell({ title, description = '', body, scripts = '', head = '' }: { title: string; description?: string; body: string; scripts?: string; head?: string }) {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -517,7 +561,7 @@ function appPage() {
   });
 }
 
-function legalPage(kind) {
+function legalPage(kind: LegalKind) {
   const isTerms = kind === 'terms';
   return pageShell({
     title: isTerms ? `Términos - ${BRAND_NAME}` : `Privacidad - ${BRAND_NAME}`,
@@ -546,7 +590,7 @@ function legalPage(kind) {
   });
 }
 
-function statsPage(id, key) {
+function statsPage(id: string, key: string) {
   return pageShell({
     title: `Actividad del enlace - ${BRAND_NAME}`,
     body: `<main class="dashboard">
@@ -612,7 +656,7 @@ function accountPage() {
 }
 
 async function migrate() {
-  const schema = await fs.readFile(path.join(__dirname, 'sql/schema.sql'), 'utf8');
+  const schema = await fs.readFile(path.join(APP_ROOT, 'sql/schema.sql'), 'utf8');
   await pool.query(schema);
 }
 
@@ -620,12 +664,12 @@ async function cleanupOldVisits() {
   await pool.query('DELETE FROM link_visits WHERE visited_at < now() - ($1::int * interval \'1 day\')', [RETENTION_DAYS]);
 }
 
-async function findLink(aliasPath) {
+async function findLink(aliasPath: string): Promise<LinkRow | null> {
   const result = await pool.query('SELECT * FROM links WHERE alias_path = $1 AND active = true', [aliasPath]);
   return result.rows[0] || null;
 }
 
-function toPublicLink(row) {
+function toPublicLink(row: LinkRow) {
   return {
     id: row.id,
     mode: row.mode,
@@ -644,7 +688,7 @@ function toPublicLink(row) {
   };
 }
 
-function withOwnerUrls(row, ownerKey) {
+function withOwnerUrls(row: LinkRow, ownerKey: string) {
   return {
     ...toPublicLink(row),
     stats_url: `${PUBLIC_URL}/stats/${row.id}/${ownerKey}`,
@@ -653,7 +697,7 @@ function withOwnerUrls(row, ownerKey) {
   };
 }
 
-async function createAlias(mode, customAlias) {
+async function createAlias(mode: LinkMode, customAlias: unknown) {
   if (customAlias) return `${mode === 'short' ? 's' : 'go'}/${sanitizeAlias(customAlias, mode)}`;
   for (let i = 0; i < 12; i += 1) {
     const alias = mode === 'short' ? `s/${randomShortCode(i > 7 ? 9 : 7)}` : `go/${randomLongPath()}`;
@@ -663,7 +707,7 @@ async function createAlias(mode, customAlias) {
   throw new Error('No se pudo generar un alias único.');
 }
 
-async function handleCreateLink(req, res, auth) {
+async function handleCreateLink(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   const payload = await readJson(req);
   const mode = payload.mode === 'long' ? 'long' : 'short';
   const parsed = normalizeUrl(payload.target_url);
@@ -672,7 +716,7 @@ async function handleCreateLink(req, res, auth) {
   const ownerKey = randomBytes(24).toString('base64url');
   const ownerKeyHash = hmac(`owner:${ownerKey}`);
   const id = randomUUID();
-  let preview = {};
+  let preview: MetadataPreview = {};
   if (!payload.meta_title || !payload.meta_description || !payload.meta_image) {
     preview = await fetchMetadata(parsed.href).catch(() => ({}));
   }
@@ -727,7 +771,7 @@ async function handleCreateLink(req, res, auth) {
   });
 }
 
-async function validateRedirectChain(startUrl) {
+async function validateRedirectChain(startUrl: string) {
   let current = startUrl;
   for (let i = 0; i < 4; i += 1) {
     const parsed = normalizeUrl(current);
@@ -744,7 +788,7 @@ async function validateRedirectChain(startUrl) {
         },
       });
       if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-        current = new URL(response.headers.get('location'), parsed.href).href;
+        current = new URL(response.headers.get('location') || '', parsed.href).href;
         continue;
       }
       return response;
@@ -755,7 +799,7 @@ async function validateRedirectChain(startUrl) {
   throw new Error('Demasiados redirects.');
 }
 
-function firstMatch(html, patterns) {
+function firstMatch(html: string, patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = html.match(pattern);
     if (match?.[1]) return cleanText(match[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'"), 500);
@@ -763,7 +807,7 @@ function firstMatch(html, patterns) {
   return '';
 }
 
-async function fetchMetadata(targetUrl) {
+async function fetchMetadata(targetUrl: string): Promise<MetadataPreview> {
   const parsed = normalizeUrl(targetUrl);
   await assertPublicUrl(parsed);
   if (/(^|\.)youtube\.com$/i.test(parsed.hostname) || /(^|\.)youtu\.be$/i.test(parsed.hostname)) {
@@ -771,7 +815,7 @@ async function fetchMetadata(targetUrl) {
     oembed.searchParams.set('format', 'json');
     oembed.searchParams.set('url', parsed.href);
     const response = await validateRedirectChain(oembed.href);
-    const data = await response.json();
+    const data = await response.json() as { title?: string; author_name?: string; thumbnail_url?: string };
     return {
       title: cleanText(data.title, 140),
       description: `Video de ${cleanText(data.author_name, 100)}`,
@@ -781,9 +825,10 @@ async function fetchMetadata(targetUrl) {
   const response = await validateRedirectChain(parsed.href);
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return { title: parsed.hostname, description: '', image: '' };
+  if (!response.body) return { title: parsed.hostname, description: '', image: '' };
   const reader = response.body.getReader();
   let received = 0;
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   while (received < MAX_HTML_BYTES) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -818,14 +863,14 @@ async function fetchMetadata(targetUrl) {
   };
 }
 
-async function handlePreview(req, res) {
+async function handlePreview(req: IncomingMessage, res: Response) {
   const payload = await readJson(req);
   const parsed = normalizeUrl(payload.target_url);
   const data = await fetchMetadata(parsed.href);
   jsonResponse(res, 200, { ok: true, preview: data });
 }
 
-async function qrSvgResponse(res, text) {
+async function qrSvgResponse(res: Response, text: string) {
   const svg = await QRCode.toString(text, {
     type: 'svg',
     margin: 1,
@@ -841,7 +886,7 @@ async function qrSvgResponse(res, text) {
   res.end(svg);
 }
 
-async function qrPngResponse(res, text) {
+async function qrPngResponse(res: Response, text: string) {
   const png = await QRCode.toBuffer(text, {
     type: 'png',
     margin: 2,
@@ -859,7 +904,7 @@ async function qrPngResponse(res, text) {
   res.end(png);
 }
 
-async function ownerQr(req, res, id, key, format = 'svg') {
+async function ownerQr(req: IncomingMessage, res: Response, id: string, key: string, format: QrFormat = 'svg') {
   const keyHash = hmac(`owner:${key}`);
   const result = await pool.query('SELECT * FROM links WHERE id = $1 AND owner_key_hash = $2', [id, keyHash]);
   const link = result.rows[0];
@@ -868,7 +913,7 @@ async function ownerQr(req, res, id, key, format = 'svg') {
   return format === 'png' ? qrPngResponse(res, target) : qrSvgResponse(res, target);
 }
 
-async function accountQr(req, res, auth, id, format = 'svg') {
+async function accountQr(req: IncomingMessage, res: Response, auth: AuthContext | null, id: string, format: QrFormat = 'svg') {
   if (!auth?.user?.id) return notFound(res);
   const result = await pool.query('SELECT * FROM links WHERE id = $1 AND user_id = $2', [id, auth.user.id]);
   const link = result.rows[0];
@@ -877,7 +922,7 @@ async function accountQr(req, res, auth, id, format = 'svg') {
   return format === 'png' ? qrPngResponse(res, target) : qrSvgResponse(res, target);
 }
 
-async function recordDirectVisit(req, link, source = 'link') {
+async function recordDirectVisit(req: IncomingMessage, link: LinkRow, source = 'link') {
   await pool.query(
     `INSERT INTO link_visits (link_id, source, consented, ip, public_ip, user_agent, referer, accept_language, browser, server)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
@@ -903,23 +948,23 @@ async function recordDirectVisit(req, link, source = 'link') {
   await pool.query('UPDATE links SET clicks = clicks + 1, updated_at = now() WHERE id = $1', [link.id]);
 }
 
-async function redirectToLink(req, res, link, source = 'link') {
+async function redirectToLink(req: IncomingMessage, res: Response, link: LinkRow, source = 'link') {
   if (await isIpBlocked(publicIp(req))) return jsonResponse(res, 403, { error: 'Acceso denegado.' });
   if (req.method === 'GET') await recordDirectVisit(req, link, source);
   return redirect(res, link.target_url);
 }
 
-async function resolveLinkRequest(req, res, link, source = 'link') {
+async function resolveLinkRequest(req: IncomingMessage, res: Response, link: LinkRow, source = 'link') {
   if (req.method === 'GET' && isPreviewCrawler(req)) {
     return htmlResponse(res, 200, linkPreviewPage(link));
   }
   return redirectToLink(req, res, link, source);
 }
 
-async function isIpBlocked(ip) {
+async function isIpBlocked(ip: string) {
   if (!ip) return false;
   const result = await pool.query('SELECT 1 FROM blocked_ips WHERE ip = $1', [ip]);
-  return result.rowCount > 0;
+  return (result.rowCount || 0) > 0;
 }
 
 function formatVisit(row) {
@@ -930,7 +975,7 @@ function formatVisit(row) {
   };
 }
 
-async function ownerStats(req, res, id, key) {
+async function ownerStats(req: IncomingMessage, res: Response, id: string, key: string) {
   const keyHash = hmac(`owner:${key}`);
   const linkResult = await pool.query('SELECT * FROM links WHERE id = $1 AND owner_key_hash = $2', [id, keyHash]);
   const link = linkResult.rows[0];
@@ -960,7 +1005,7 @@ async function ownerStats(req, res, id, key) {
   });
 }
 
-async function adminOverview(req, res, auth) {
+async function adminOverview(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (!isAdmin(auth)) return notFound(res);
   const [counts, links, visits] = await Promise.all([
     pool.query('SELECT (SELECT count(*) FROM links)::int AS links, (SELECT count(*) FROM link_visits)::int AS visits, (SELECT count(*) FROM users)::int AS users'),
@@ -976,7 +1021,7 @@ async function adminOverview(req, res, auth) {
   jsonResponse(res, 200, { ok: true, counts: counts.rows[0], links: links.rows, visits: visits.rows.map(formatVisit) });
 }
 
-async function blockIp(req, res, auth) {
+async function blockIp(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (!isAdmin(auth)) return notFound(res);
   const payload = await readJson(req);
   const ip = cleanText(payload.ip, 80);
@@ -989,7 +1034,7 @@ async function blockIp(req, res, auth) {
   jsonResponse(res, 201, { ok: true });
 }
 
-async function handleRegister(req, res) {
+async function handleRegister(req: IncomingMessage, res: Response) {
   const payload = await readJson(req);
   const username = cleanUsername(payload.username);
   const email = cleanText(payload.email, 160);
@@ -1015,11 +1060,12 @@ async function handleRegister(req, res) {
     ],
   );
   const authUser = publicUser(user.rows[0]);
+  if (!authUser) throw new Error('No se pudo crear el usuario.');
   await createSession(req, res, authUser);
   jsonResponse(res, 201, { ok: true, user: authUser });
 }
 
-async function handleLogin(req, res) {
+async function handleLogin(req: IncomingMessage, res: Response) {
   const payload = await readJson(req);
   const emailNormalized = normalizeEmail(payload.email);
   const password = String(payload.password || '');
@@ -1029,12 +1075,13 @@ async function handleLogin(req, res) {
     return jsonResponse(res, 401, { error: 'Email o contraseña incorrectos.' });
   }
   const authUser = publicUser(user);
+  if (!authUser) throw new Error('No se pudo leer el usuario.');
   await createSession(req, res, authUser);
   await logUserEvent({ user: authUser }, req, 'login');
   jsonResponse(res, 200, { ok: true, user: authUser });
 }
 
-async function handleLogout(req, res, auth) {
+async function handleLogout(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (auth?.session_id) {
     await pool.query('UPDATE user_sessions SET revoked_at = now() WHERE id = $1', [auth.session_id]);
   }
@@ -1042,11 +1089,11 @@ async function handleLogout(req, res, auth) {
   jsonResponse(res, 200, { ok: true });
 }
 
-async function handleMe(req, res, auth) {
+async function handleMe(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   jsonResponse(res, 200, { ok: true, user: auth?.user || null });
 }
 
-async function accountHistory(req, res, auth) {
+async function accountHistory(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (!auth?.user?.id) return jsonResponse(res, 401, { error: 'Inicia sesión.' });
   const links = await pool.query(
     `SELECT l.*,
@@ -1074,7 +1121,7 @@ async function accountHistory(req, res, auth) {
   });
 }
 
-async function accountSessions(req, res, auth) {
+async function accountSessions(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (!auth?.user?.id) return jsonResponse(res, 401, { error: 'Inicia sesión.' });
   const sessions = await pool.query(
     `SELECT id, device_label, ip, user_agent, created_at, last_seen_at, expires_at,
@@ -1087,22 +1134,22 @@ async function accountSessions(req, res, auth) {
   jsonResponse(res, 200, { ok: true, sessions: sessions.rows });
 }
 
-async function revokeSession(req, res, auth, sessionId) {
+async function revokeSession(req: IncomingMessage, res: Response, auth: AuthContext | null, sessionId: string) {
   if (!auth?.user?.id) return jsonResponse(res, 401, { error: 'Inicia sesión.' });
   await pool.query('UPDATE user_sessions SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND id <> $3', [sessionId, auth.user.id, auth.session_id]);
   jsonResponse(res, 200, { ok: true });
 }
 
-async function logoutOtherSessions(req, res, auth) {
+async function logoutOtherSessions(req: IncomingMessage, res: Response, auth: AuthContext | null) {
   if (!auth?.user?.id) return jsonResponse(res, 401, { error: 'Inicia sesión.' });
   await pool.query('UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL', [auth.user.id, auth.session_id]);
   jsonResponse(res, 200, { ok: true });
 }
 
-async function serveStatic(req, res, pathname) {
+async function serveStatic(req: IncomingMessage, res: Response, pathname: string) {
   const name = pathname.replace('/assets/', '');
   if (!/^[A-Za-z0-9._-]+$/.test(name)) return notFound(res);
-  const filePath = path.join(__dirname, 'public', name);
+  const filePath = path.join(APP_ROOT, 'public', name);
   try {
     const body = await fs.readFile(filePath);
     const ext = path.extname(filePath);
@@ -1116,8 +1163,8 @@ async function serveStatic(req, res, pathname) {
   }
 }
 
-async function handleRoute(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+async function handleRoute(req: IncomingMessage, res: Response) {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(url.pathname);
   try {
     if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/favicon.ico') return redirect(res, '/assets/favicon.svg');
@@ -1140,7 +1187,7 @@ async function handleRoute(req, res) {
     const revokeMatch = pathname.match(/^\/api\/account\/sessions\/([0-9a-f-]{36})\/revoke$/);
     if (req.method === 'POST' && revokeMatch) return revokeSession(req, res, auth, revokeMatch[1]);
     const accountQrMatch = pathname.match(/^\/api\/account\/links\/([0-9a-f-]{36})\/qr\.(svg|png)$/);
-    if (req.method === 'GET' && accountQrMatch) return accountQr(req, res, auth, accountQrMatch[1], accountQrMatch[2]);
+    if (req.method === 'GET' && accountQrMatch) return accountQr(req, res, auth, accountQrMatch[1], accountQrMatch[2] as QrFormat);
     if (req.method === 'GET' && pathname === '/api/admin/overview') return adminOverview(req, res, auth);
     if (req.method === 'POST' && pathname === '/api/admin/block-ip') return blockIp(req, res, auth);
     if (req.method === 'POST' && pathname === '/api/links') return handleCreateLink(req, res, auth);
@@ -1150,7 +1197,7 @@ async function handleRoute(req, res) {
     const statsMatch = pathname.match(/^\/stats\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{20,80})$/);
     if (req.method === 'GET' && statsMatch) return htmlResponse(res, 200, statsPage(statsMatch[1], statsMatch[2]));
     const ownerQrMatch = pathname.match(/^\/qr\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{20,80})\.(svg|png)$/);
-    if (req.method === 'GET' && ownerQrMatch) return ownerQr(req, res, ownerQrMatch[1], ownerQrMatch[2], ownerQrMatch[3]);
+    if (req.method === 'GET' && ownerQrMatch) return ownerQr(req, res, ownerQrMatch[1], ownerQrMatch[2], ownerQrMatch[3] as QrFormat);
     if ((req.method === 'GET' || req.method === 'HEAD') && pathname.startsWith('/q/')) {
       const alias = pathname.slice(3);
       const link = await findLink(alias);
