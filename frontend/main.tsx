@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { createRoot } from 'react-dom/client';
 import { animate, createScope, stagger } from 'animejs';
 import {
@@ -18,22 +19,84 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import './styles.css';
+
+type Mode = 'short' | 'long';
+type AuthMode = 'login' | 'register';
+type StatusType = '' | 'success' | 'error';
+
+interface StatusState {
+  message: string;
+  type: StatusType;
+}
+
+interface AuthUser {
+  id?: string;
+  username: string;
+  email?: string;
+  role?: 'admin' | 'user' | string;
+}
+
+interface AuthResponse {
+  user?: AuthUser;
+  error?: string;
+}
+
+interface PreviewResponse {
+  preview?: {
+    title?: string;
+    description?: string;
+    image?: string;
+  };
+  error?: string;
+}
+
+interface LinkResult {
+  short_url: string;
+  stats_url: string;
+  qr_svg_url: string;
+  qr_png_url?: string;
+  meta_title?: string;
+  meta_description?: string;
+  meta_image?: string;
+}
+
+interface LinkResponse {
+  link?: LinkResult;
+  error?: string;
+}
+
+interface FeatureItem {
+  label: string;
+  Icon: LucideIcon;
+}
+
+interface AuthDialogProps {
+  mode: AuthMode;
+  setMode: Dispatch<SetStateAction<AuthMode>>;
+  onClose: () => void;
+  onAuthed: Dispatch<SetStateAction<AuthUser | null>>;
+}
 
 const prefersReducedMotion = () => (
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 );
 
-const parseJson = async (response) => {
+const parseJson = async <T,>(response: Response): Promise<T> => {
   try {
-    return await response.json();
+    return await response.json() as T;
   } catch {
-    return {};
+    return {} as T;
   }
 };
 
-const displayHost = (value) => {
+const errorMessage = (error: unknown, fallback: string) => (
+  error instanceof Error && error.message ? error.message : fallback
+);
+
+const displayHost = (value: string) => {
   const raw = value.trim();
   if (!raw) return 'sin destino';
   try {
@@ -44,7 +107,7 @@ const displayHost = (value) => {
   }
 };
 
-const safeImageUrl = (value) => {
+const safeImageUrl = (value: string) => {
   const raw = value.trim();
   if (!raw) return '';
   try {
@@ -56,7 +119,7 @@ const safeImageUrl = (value) => {
   }
 };
 
-const featureItems = [
+const featureItems: FeatureItem[] = [
   { label: 'Sin anuncios', Icon: Link2 },
   { label: 'Link corto', Icon: MousePointerClick },
   { label: 'Link largo', Icon: Route },
@@ -71,12 +134,12 @@ const featureItems = [
   { label: 'Listo al instante', Icon: ArrowRight },
 ];
 
-function AuthDialog({ mode, setMode, onClose, onAuthed }) {
+function AuthDialog({ mode, setMode, onClose, onAuthed }: AuthDialogProps) {
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const submit = async (event) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
     setMessage('');
@@ -87,12 +150,13 @@ function AuthDialog({ mode, setMode, onClose, onAuthed }) {
         credentials: 'same-origin',
         body: JSON.stringify(form),
       });
-      const data = await parseJson(response);
+      const data = await parseJson<AuthResponse>(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo entrar.');
+      if (!data.user) throw new Error('No se pudo leer el usuario.');
       onAuthed(data.user);
       onClose();
     } catch (error) {
-      setMessage(error.message || 'No se pudo entrar.');
+      setMessage(errorMessage(error, 'No se pudo entrar.'));
     } finally {
       setBusy(false);
     }
@@ -144,19 +208,19 @@ function AuthDialog({ mode, setMode, onClose, onAuthed }) {
 }
 
 function App() {
-  const shellRef = useRef(null);
-  const [mode, setMode] = useState('short');
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [mode, setMode] = useState<Mode>('short');
   const [targetUrl, setTargetUrl] = useState('');
   const [customAlias, setCustomAlias] = useState('');
   const [ownerLabel, setOwnerLabel] = useState('');
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [metaImage, setMetaImage] = useState('');
-  const [status, setStatus] = useState({ message: '', type: '' });
-  const [result, setResult] = useState(null);
-  const [authUser, setAuthUser] = useState(null);
+  const [status, setStatus] = useState<StatusState>({ message: '', type: '' });
+  const [result, setResult] = useState<LinkResult | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [busy, setBusy] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -174,14 +238,14 @@ function App() {
 
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'same-origin' })
-      .then((response) => response.ok ? response.json() : { user: null })
+      .then((response) => response.ok ? parseJson<AuthResponse>(response) : { user: undefined })
       .then((data) => setAuthUser(data.user || null))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!shellRef.current || prefersReducedMotion()) return undefined;
-    const scope = createScope({ root: shellRef }).add(() => {
+    const scope = createScope({ root: shellRef.current }).add(() => {
       animate('.motion-rise', {
         opacity: [0, 1],
         translateY: [18, 0],
@@ -193,9 +257,9 @@ function App() {
     return () => scope.revert();
   }, []);
 
-  const setMessage = (message, type = '') => setStatus({ message, type });
+  const setMessage = (message: string, type: StatusType = '') => setStatus({ message, type });
 
-  const openAuth = (nextMode) => {
+  const openAuth = (nextMode: AuthMode) => {
     setAuthMode(nextMode);
     setAuthOpen(true);
   };
@@ -220,20 +284,20 @@ function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ target_url: value }),
       });
-      const data = await parseJson(response);
+      const data = await parseJson<PreviewResponse>(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo cargar la vista.');
-      setMetaTitle(data.preview.title || '');
-      setMetaDescription(data.preview.description || '');
-      setMetaImage(data.preview.image || '');
+      setMetaTitle(data.preview?.title || '');
+      setMetaDescription(data.preview?.description || '');
+      setMetaImage(data.preview?.image || '');
       setMessage('Preview detectado.', 'success');
     } catch (error) {
-      setMessage(error.message || 'No se pudo cargar la vista.', 'error');
+      setMessage(errorMessage(error, 'No se pudo cargar la vista.'), 'error');
     } finally {
       setPreviewBusy(false);
     }
   };
 
-  const createLink = async (event) => {
+  const createLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = targetUrl.trim();
     if (!value) {
@@ -259,15 +323,16 @@ function App() {
           meta_image: metaImage.trim(),
         }),
       });
-      const data = await parseJson(response);
+      const data = await parseJson<LinkResponse>(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo crear el link.');
+      if (!data.link) throw new Error('No se pudo leer el link generado.');
       setResult(data.link);
       if (!metaTitle && data.link.meta_title) setMetaTitle(data.link.meta_title);
       if (!metaDescription && data.link.meta_description) setMetaDescription(data.link.meta_description);
       if (!metaImage && data.link.meta_image) setMetaImage(data.link.meta_image);
       setMessage(authUser ? 'Guardado en tu historial.' : 'Listo. Copia el link o descarga el QR.', 'success');
     } catch (error) {
-      setMessage(error.message || 'No se pudo crear el link.', 'error');
+      setMessage(errorMessage(error, 'No se pudo crear el link.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -505,4 +570,10 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('No se encontró el contenedor principal.');
+}
+
+createRoot(rootElement).render(<App />);

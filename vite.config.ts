@@ -9,7 +9,7 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: false,
     rollupOptions: {
-      input: 'frontend/main.jsx',
+      input: 'frontend/main.tsx',
       output: {
         entryFileNames: 'app.js',
         chunkFileNames: 'chunks/[name]-[hash].js',

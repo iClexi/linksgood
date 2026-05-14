@@ -6,7 +6,8 @@
   "scripts": {
     "build:frontend": "vite build",
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && node --check public/account.js && npm run build:frontend"
+    "typecheck": "tsc --noEmit",
+    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && node --check public/account.js && npm run typecheck && npm run build:frontend"
   },
   "dependencies": {
     "animejs": "^4.4.1",
@@ -20,7 +21,10 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.3",
     "vite": "^8.0.12"
   }
 }
