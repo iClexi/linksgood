@@ -1,12 +1,13 @@
 # Linksgood
 
-Acortador y alargador de enlaces para `links.iclexi.tech`.
+Acortador, alargador y generador QR para `links.iclexi.tech`.
 
 ## Principios
 
 - No hace tracking oculto.
-- Los enlaces redirigen directamente al destino.
+- Los enlaces y QR redirigen directamente al destino.
 - La analítica visible para el creador se limita a datos básicos del request descritos en términos y privacidad.
+- Login/register es opcional; una cuenta añade historial y sesiones, no bloquea el uso rápido.
 - Los secretos viven fuera del repo, en `/etc/links/links.env` o `/root/.secrets/`.
 
 ## Desarrollo

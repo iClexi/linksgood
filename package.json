@@ -6,12 +6,13 @@
   "scripts": {
     "build:frontend": "vite build",
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && npm run build:frontend"
+    "check": "node --check server.js && node --check public/admin.js && node --check public/stats.js && node --check public/account.js && npm run build:frontend"
   },
   "dependencies": {
     "animejs": "^4.4.1",
     "lucide-react": "^1.14.0",
     "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

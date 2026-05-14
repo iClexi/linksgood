@@ -23,28 +23,28 @@ const load = async () => {
   summary.innerHTML = `
     <div><strong>${data.counts.links}</strong><span>enlaces</span></div>
     <div><strong>${data.counts.visits}</strong><span>visitas</span></div>
+    <div><strong>${data.counts.users}</strong><span>usuarios</span></div>
   `;
-  linksEl.innerHTML = table(['Creado', 'Alias', 'Dueño', 'Destino', 'Clicks', 'IP creación'], data.links.map((link) => `
+  linksEl.innerHTML = table(['Creado', 'Alias', 'Usuario', 'Etiqueta', 'Destino', 'Clicks', 'IP creación'], data.links.map((link) => `
     <tr>
       <td>${escapeHtml(formatDate(link.created_at))}</td>
       <td>${escapeHtml(link.alias_path)}</td>
+      <td>${escapeHtml(link.owner_username || 'anónimo')}</td>
       <td>${escapeHtml(link.owner_label || 'sin etiqueta')}</td>
       <td>${escapeHtml(link.target_host)}</td>
       <td>${escapeHtml(link.clicks)}</td>
       <td>${escapeHtml(link.created_ip)}</td>
     </tr>
   `));
-  visitsEl.innerHTML = table(['Fecha', 'Alias', 'Dueño', 'IP', 'Navegador', 'Datos'], data.visits.map((visit) => {
-    const browser = visit.browser || {};
-    return `<tr>
+  visitsEl.innerHTML = table(['Fecha', 'Alias', 'Origen', 'Dueño', 'IP', 'Dispositivo', 'Navegador'], data.visits.map((visit) => `<tr>
       <td>${escapeHtml(formatDate(visit.visited_at))}</td>
       <td>${escapeHtml(visit.alias_path)}</td>
+      <td>${escapeHtml(visit.source === 'qr' ? 'QR' : 'Link')}</td>
       <td>${escapeHtml(visit.owner_label || 'sin etiqueta')}</td>
       <td>${escapeHtml(visit.public_ip || visit.ip || '')}</td>
+      <td>${escapeHtml(visit.device || '')}</td>
       <td>${escapeHtml((visit.user_agent || '').slice(0, 120))}</td>
-      <td>${escapeHtml([browser.timezone, browser.platform, browser.viewport ? `${browser.viewport.width}x${browser.viewport.height}` : ''].filter(Boolean).join(' · '))}</td>
-    </tr>`;
-  }));
+    </tr>`));
 };
 
 load();

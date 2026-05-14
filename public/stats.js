@@ -18,15 +18,15 @@ const renderVisits = (visits) => {
     return;
   }
   visitsEl.innerHTML = `<table>
-    <thead><tr><th>Fecha</th><th>IP</th><th>Navegador</th><th>Referrer</th><th>Datos</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Origen</th><th>IP</th><th>Dispositivo</th><th>Navegador</th><th>Referrer</th></tr></thead>
     <tbody>${visits.map((visit) => {
-      const browser = visit.browser || {};
       return `<tr>
         <td>${escapeHtml(formatDate(visit.visited_at))}</td>
+        <td>${escapeHtml(visit.source === 'qr' ? 'QR' : 'Link')}</td>
         <td>${escapeHtml(visit.public_ip || visit.ip || '')}</td>
+        <td>${escapeHtml(visit.device || '')}</td>
         <td>${escapeHtml((visit.user_agent || '').slice(0, 120))}</td>
         <td>${escapeHtml(visit.referer || '')}</td>
-        <td>${escapeHtml([browser.timezone, browser.platform, browser.viewport ? `${browser.viewport.width}x${browser.viewport.height}` : ''].filter(Boolean).join(' · '))}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -42,9 +42,10 @@ const load = async () => {
   }
   title.textContent = data.link.short_url;
   summary.innerHTML = `
-    <div><strong>${data.link.clicks}</strong><span>visitas</span></div>
+    <div><strong>${data.summary?.total ?? data.link.clicks}</strong><span>visitas</span></div>
+    <div><strong>${data.summary?.qr ?? 0}</strong><span>desde QR</span></div>
     <div><strong>${escapeHtml(data.link.target_host)}</strong><span>destino</span></div>
-    <div><strong>${escapeHtml(data.link.mode)}</strong><span>modo</span></div>
+    <div><strong><a href="${escapeHtml(data.link.qr_svg_url || '#')}" target="_blank" rel="noreferrer">QR SVG</a></strong><span>descarga</span></div>
   `;
   renderVisits(data.visits || []);
 };
