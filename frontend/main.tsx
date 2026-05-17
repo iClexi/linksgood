@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, SetStateAction, SyntheticEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { animate, createScope, stagger } from 'animejs';
+import { animate, createScope, createTimeline, spring, stagger } from 'animejs';
+import { splitText } from 'animejs/text';
 import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
   Copy,
   Download,
+  Eye,
+  EyeOff,
   KeyRound,
   Link2,
   LogIn,
   LogOut,
+  Mail,
   MousePointerClick,
   QrCode,
   Route,
@@ -135,9 +139,95 @@ const featureItems: FeatureItem[] = [
 ];
 
 function AuthDialog({ mode, setMode, onClose, onAuthed }: AuthDialogProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const messageRef = useRef<HTMLParagraphElement | null>(null);
+  const passwordToggleRef = useRef<HTMLButtonElement | null>(null);
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (!panelRef.current || prefersReducedMotion()) return;
+    animate(panelRef.current, {
+      opacity: [0, 1],
+      scale: [0.96, 1],
+      translateY: [18, 0],
+      duration: 520,
+      ease: spring({ bounce: 0.22, duration: 520 }),
+    });
+    animate(panelRef.current.querySelectorAll('label, .auth-tab, .primary-button'), {
+      opacity: [0, 1],
+      translateY: [10, 0],
+      delay: stagger(35, { start: 120 }),
+      duration: 360,
+      ease: 'outCubic',
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!panelRef.current || prefersReducedMotion()) return;
+    animate(panelRef.current.querySelectorAll('.auth-copy, .auth-field, .auth-security-strip span'), {
+      opacity: [0.48, 1],
+      translateY: [8, 0],
+      duration: 340,
+      delay: stagger(34),
+      ease: 'outCubic',
+    });
+    const activeTab = panelRef.current.querySelector('.auth-tab.active');
+    if (activeTab) {
+      animate(activeTab, {
+        scale: [0.95, 1],
+        duration: 360,
+        ease: spring({ bounce: 0.32, duration: 360 }),
+      });
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (!busy || !formRef.current || prefersReducedMotion()) return undefined;
+    const button = formRef.current.querySelector('.auth-submit');
+    const icon = button?.querySelector('svg');
+    if (!button) return undefined;
+    const pulse = animate(button, {
+      scale: [1, 1.018, 1],
+      duration: 820,
+      loop: true,
+      ease: 'inOutSine',
+    });
+    const arrow = icon ? animate(icon, {
+      translateX: [0, 5, 0],
+      duration: 680,
+      loop: true,
+      ease: 'inOutSine',
+    }) : null;
+    return () => {
+      pulse.cancel();
+      arrow?.cancel();
+      animate(button, { scale: 1, duration: 120, ease: 'outCubic' });
+    };
+  }, [busy]);
+
+  useEffect(() => {
+    if (!message || !messageRef.current || prefersReducedMotion()) return;
+    animate(messageRef.current, {
+      opacity: [0, 1],
+      translateY: [6, 0],
+      duration: 260,
+      ease: 'outCubic',
+    });
+  }, [message]);
+
+  useEffect(() => {
+    if (!passwordToggleRef.current || prefersReducedMotion()) return;
+    animate(passwordToggleRef.current, {
+      scale: [0.86, 1],
+      rotate: [showPassword ? -8 : 8, 0],
+      duration: 240,
+      ease: 'outBack',
+    });
+  }, [showPassword]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,7 +254,7 @@ function AuthDialog({ mode, setMode, onClose, onAuthed }: AuthDialogProps) {
 
   return (
     <div className="auth-modal" role="presentation" onMouseDown={onClose}>
-      <section className="auth-panel glass" role="dialog" aria-modal="true" aria-label="Acceso" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={panelRef} className="auth-panel glass" role="dialog" aria-modal="true" aria-label="Acceso" onMouseDown={(event) => event.stopPropagation()}>
         <div className="auth-head">
           <div>
             <p className="eyebrow">Cuenta opcional</p>
@@ -177,30 +267,53 @@ function AuthDialog({ mode, setMode, onClose, onAuthed }: AuthDialogProps) {
             ? 'Tu historial, QR y sesiones aparecen cuando entras. Crear links sigue funcionando sin cuenta.'
             : 'La cuenta sólo guarda tus enlaces y dispositivos. No bloquea el uso rápido.'}
         </p>
+        <div className="auth-security-strip" aria-label="Ventajas de cuenta">
+          <span>Historial</span>
+          <span>QR</span>
+        </div>
         <div className="auth-tabs" role="tablist" aria-label="Autenticación">
           <button className={mode === 'login' ? 'auth-tab active' : 'auth-tab'} type="button" onClick={() => setMode('login')}>Entrar</button>
           <button className={mode === 'register' ? 'auth-tab active' : 'auth-tab'} type="button" onClick={() => setMode('register')}>Crear cuenta</button>
         </div>
-        <form className="auth-form" onSubmit={submit}>
+        <form ref={formRef} className="auth-form" onSubmit={submit}>
           {mode === 'register' ? (
-            <label>
+            <label className="auth-field">
               <span>Usuario</span>
-              <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} autoComplete="username" required />
+              <span className="auth-input-wrap">
+                <User aria-hidden="true" size={17} />
+                <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} autoComplete="username" required />
+              </span>
             </label>
           ) : null}
-          <label>
+          <label className="auth-field">
             <span>Email</span>
-            <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} autoComplete="email" required />
+            <span className="auth-input-wrap">
+              <Mail aria-hidden="true" size={17} />
+              <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} autoComplete="email" required />
+            </span>
           </label>
-          <label>
+          <label className="auth-field">
             <span>Contraseña</span>
-            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
+            <span className="auth-input-wrap">
+              <KeyRound aria-hidden="true" size={17} />
+              <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
+              <button
+                ref={passwordToggleRef}
+                className="password-toggle"
+                type="button"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? <EyeOff aria-hidden="true" size={17} /> : <Eye aria-hidden="true" size={17} />}
+              </button>
+            </span>
           </label>
-          <button className="primary-button" type="submit" disabled={busy}>
+          <button className={busy ? 'primary-button auth-submit is-busy' : 'primary-button auth-submit'} type="submit" disabled={busy}>
             {busy ? 'Procesando...' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
             <ArrowRight aria-hidden="true" size={18} />
           </button>
-          {message ? <p className="status error" role="status">{message}</p> : null}
+          {message ? <p ref={messageRef} className="status error" role="status">{message}</p> : null}
         </form>
       </section>
     </div>
@@ -209,6 +322,13 @@ function AuthDialog({ mode, setMode, onClose, onAuthed }: AuthDialogProps) {
 
 function App() {
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
+  const previewRef = useRef<HTMLElement | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
+  const statusRef = useRef<HTMLParagraphElement | null>(null);
+  const didTypeRef = useRef(false);
+  const didPreviewRef = useRef(false);
   const [mode, setMode] = useState<Mode>('short');
   const [targetUrl, setTargetUrl] = useState('');
   const [customAlias, setCustomAlias] = useState('');
@@ -224,6 +344,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
 
   const aliasPath = useMemo(() => {
     const alias = customAlias.trim().replace(/^\/+/, '').replace(/\/+$/, '');
@@ -235,6 +356,10 @@ function App() {
   const previewTitle = metaTitle.trim() || (host === 'sin destino' ? 'Tu link queda listo aquí' : host);
   const previewDescription = metaDescription.trim() || 'Linksgood crea un enlace corto, largo o QR con actividad visible para el creador.';
   const previewImage = safeImageUrl(metaImage);
+  const hasTarget = targetUrl.trim().length > 0;
+  const hasPreview = Boolean(metaTitle.trim() || metaDescription.trim() || previewImage);
+  const flowStage = result ? 3 : busy ? 2 : hasPreview ? 1 : hasTarget ? 0 : -1;
+  const flowProgress = `${Math.max(0, flowStage) / 3 * 100}%`;
 
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'same-origin' })
@@ -244,18 +369,350 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!shellRef.current || prefersReducedMotion()) return undefined;
+    if (!shellRef.current) return undefined;
+    if (prefersReducedMotion()) {
+      setIntroDone(true);
+      return undefined;
+    }
     const scope = createScope({ root: shellRef.current }).add(() => {
-      animate('.motion-rise', {
-        opacity: [0, 1],
-        translateY: [18, 0],
-        duration: 620,
-        delay: stagger(55),
+      const titleSplit = splitText('.title-copy', {
+        accessible: false,
+        words: { wrap: 'clip', class: 'split-word' },
+      });
+      const titleWords = titleSplit.words as HTMLElement[];
+      titleWords.forEach((word) => {
+        if (word.closest('.grad')) word.classList.add('grad-word');
+      });
+
+      animate('.loader-node', {
+        opacity: [0.25, 1, 0.25],
+        scale: [0.64, 1.16, 0.64],
+        duration: 760,
+        delay: stagger(90),
+        loop: true,
+        ease: 'inOutSine',
+      });
+
+      animate('.loader-link', {
+        scaleX: [0, 1],
+        opacity: [0.1, 0.86],
+        duration: 520,
+        delay: stagger(100, { start: 120 }),
         ease: 'outCubic',
       });
+
+      animate('.loader-bar-fill', {
+        width: ['0%', '100%'],
+        duration: 980,
+        ease: 'inOutCubic',
+      });
+
+      animate('.boot-loader', {
+        opacity: [1, 0],
+        scale: [1, 1.018],
+        duration: 360,
+        delay: 1050,
+        ease: 'outCubic',
+        onComplete: () => setIntroDone(true),
+      });
+
+      createTimeline({ defaults: { ease: 'outCubic' } })
+        .add('.topbar.motion-rise', {
+          opacity: [0, 1],
+          translateY: [-16, 0],
+          duration: 520,
+        }, 520)
+        .add(titleWords, {
+          opacity: [0, 1],
+          translateY: ['104%', '0%'],
+          filter: ['blur(10px)', 'blur(0px)'],
+          duration: 920,
+          delay: stagger(72),
+          ease: 'out(4)',
+        }, 650)
+        .add('.title-copy .grad-word', {
+          opacity: [0.86, 1],
+          scale: [0.982, 1],
+          duration: 580,
+          delay: stagger(42),
+          ease: 'out(3)',
+        }, 980)
+        .add('.subtitle.motion-rise', {
+          opacity: [0, 1],
+          translateY: [20, 0],
+          duration: 620,
+        }, 1050)
+        .add('#link-form.motion-rise', {
+          opacity: [0, 1],
+          translateY: [26, 0],
+          scale: [0.985, 1],
+          duration: 720,
+        }, 1130)
+        .add('.features.motion-rise, .preview-card.motion-rise, .idle-panel.motion-rise, .seo-card.motion-rise, .footer.motion-rise', {
+          opacity: [0, 1],
+          translateY: [18, 0],
+          duration: 620,
+          delay: stagger(45),
+        }, 1320);
+
+      animate('.converter-pills span, .flow-node', {
+        opacity: [0, 1],
+        translateY: [10, 0],
+        scale: [0.92, 1],
+        duration: 420,
+        delay: stagger(42, { start: 1220 }),
+        ease: 'outCubic',
+      });
+
+      animate('.feature-chip, .inspect-list div, .mode-strip span, .seo-points article', {
+        opacity: [0, 1],
+        translateY: [18, 0],
+        scale: [0.965, 1],
+        duration: 520,
+        delay: stagger(38, { start: 1340 }),
+        ease: spring({ bounce: 0.24, duration: 520 }),
+      });
+
+      animate('.feature-chip .feat-icon', {
+        scale: [0.82, 1.14, 1],
+        rotate: [-10, 4, 0],
+        duration: 680,
+        delay: stagger(48, { start: 1500 }),
+        ease: 'outCubic',
+      });
+
+      animate('.idle-status', {
+        boxShadow: [
+          '0 0 0 rgba(234, 43, 31, 0)',
+          '0 0 24px rgba(234, 43, 31, 0.36)',
+          '0 0 0 rgba(234, 43, 31, 0)',
+        ],
+        duration: 2200,
+        loop: true,
+        ease: 'inOutSine',
+      });
+
+      animate('.signal-dot', {
+        opacity: [0, 1, 1, 0],
+        translateX: ['-12vw', '112vw'],
+        duration: 4200,
+        delay: stagger(620),
+        loop: true,
+        ease: 'linear',
+      });
+
+      animate('.converter-scan', {
+        opacity: [0, 0.8, 0],
+        translateX: ['-125%', '225%'],
+        duration: 1700,
+        delay: 1450,
+        loop: 2,
+        ease: 'inOutSine',
+      });
+
+      animate('.brand-mark', {
+        rotate: [-12, 0],
+        scale: [0.84, 1],
+        duration: 720,
+        delay: 620,
+        ease: spring({ bounce: 0.38, duration: 720 }),
+      });
+
+      return () => titleSplit.revert();
     });
     return () => scope.revert();
   }, []);
+
+  useEffect(() => {
+    if (!introDone || !shellRef.current || prefersReducedMotion()) return undefined;
+    const targets = Array.from(shellRef.current.querySelectorAll<HTMLElement>(
+      '.feature-chip, .inspect-list div, .seo-points article, .preview-card, .idle-panel, .seo-card',
+    ));
+    const cleanups = targets.map((target) => {
+      const enter = () => {
+        animate(target, {
+          translateY: -5,
+          scale: 1.012,
+          duration: 240,
+          ease: 'outCubic',
+        });
+      };
+      const leave = () => {
+        animate(target, {
+          translateY: 0,
+          scale: 1,
+          duration: 260,
+          ease: 'outCubic',
+        });
+      };
+      target.addEventListener('pointerenter', enter);
+      target.addEventListener('pointerleave', leave);
+      return () => {
+        target.removeEventListener('pointerenter', enter);
+        target.removeEventListener('pointerleave', leave);
+      };
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [introDone]);
+
+  useEffect(() => {
+    if (!fieldRef.current || prefersReducedMotion()) return;
+    if (!hasTarget) {
+      didTypeRef.current = false;
+      return;
+    }
+    const icon = fieldRef.current.querySelector('.field-icon');
+    animate(fieldRef.current, {
+      scale: [1, 1.007, 1],
+      duration: 260,
+      ease: 'outCubic',
+    });
+    if (icon) {
+      animate(icon, {
+        rotate: [didTypeRef.current ? -4 : -12, 0],
+        scale: [1.12, 1],
+        duration: 320,
+        ease: 'outBack',
+      });
+    }
+    didTypeRef.current = true;
+  }, [hasTarget, targetUrl]);
+
+  useEffect(() => {
+    if (!shellRef.current || prefersReducedMotion()) return;
+    const fill = shellRef.current.querySelector('.flow-line-fill');
+    const activeNodes = shellRef.current.querySelectorAll('.flow-node.is-active');
+    if (fill) {
+      animate(fill, {
+        width: flowProgress,
+        duration: 520,
+        ease: 'outCubic',
+      });
+    }
+    if (activeNodes.length) {
+      animate(activeNodes, {
+        scale: [0.82, 1],
+        opacity: [0.62, 1],
+        duration: 460,
+        delay: stagger(36),
+        ease: spring({ bounce: 0.34, duration: 460 }),
+      });
+    }
+  }, [flowProgress, flowStage]);
+
+  useEffect(() => {
+    if (!formRef.current || prefersReducedMotion()) return;
+    const activeButton = formRef.current.querySelector('.mode-tabs button.active');
+    const badge = previewRef.current?.querySelector('.badge');
+    if (activeButton) {
+      animate(activeButton, {
+        scale: [0.96, 1],
+        duration: 360,
+        ease: spring({ bounce: 0.3, duration: 360 }),
+      });
+    }
+    if (badge) {
+      animate(badge, {
+        translateY: [6, 0],
+        opacity: [0.5, 1],
+        duration: 280,
+        ease: 'outCubic',
+      });
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (!previewRef.current || prefersReducedMotion()) return;
+    if (!didPreviewRef.current) {
+      didPreviewRef.current = true;
+      return;
+    }
+    animate(previewRef.current, {
+      translateY: [5, 0],
+      scale: [0.995, 1],
+      duration: 420,
+      ease: 'outCubic',
+    });
+    animate(previewRef.current.querySelectorAll('.preview-thumb, .preview-title, .preview-meta p, .inspect-list div'), {
+      opacity: [0.58, 1],
+      translateY: [8, 0],
+      duration: 360,
+      delay: stagger(28),
+      ease: 'outCubic',
+    });
+  }, [aliasPath, authUser, mode, previewDescription, previewImage, previewTitle]);
+
+  useEffect(() => {
+    if (!busy || !formRef.current || prefersReducedMotion()) return undefined;
+    const button = formRef.current.querySelector('#submit');
+    if (!button) return undefined;
+    const icon = button.querySelector('svg');
+    const pulse = animate(button, {
+      scale: [1, 1.012, 1],
+      duration: 900,
+      loop: true,
+      ease: 'inOutSine',
+    });
+    const arrow = icon ? animate(icon, {
+      translateX: [0, 5, 0],
+      duration: 700,
+      loop: true,
+      ease: 'inOutSine',
+    }) : null;
+    return () => {
+      pulse.cancel();
+      arrow?.cancel();
+      animate(button, { scale: 1, duration: 120, ease: 'outCubic' });
+    };
+  }, [busy]);
+
+  useEffect(() => {
+    if (!status.message || !statusRef.current || prefersReducedMotion()) return;
+    animate(statusRef.current, {
+      opacity: [0, 1],
+      translateY: [5, 0],
+      duration: 240,
+      ease: 'outCubic',
+    });
+  }, [status.message, status.type]);
+
+  useEffect(() => {
+    if (!result || !resultRef.current || prefersReducedMotion()) return;
+    animate(resultRef.current, {
+      opacity: [0, 1],
+      translateY: [22, 0],
+      scale: [0.982, 1],
+      duration: 560,
+      ease: spring({ bounce: 0.28, duration: 560 }),
+    });
+    animate(resultRef.current.querySelectorAll('.result-link, .result-actions .ghost, .qr-preview-box'), {
+      opacity: [0, 1],
+      translateY: [12, 0],
+      duration: 420,
+      delay: stagger(55, { start: 80 }),
+      ease: 'outCubic',
+    });
+  }, [result]);
+
+  useEffect(() => {
+    if (!copied || !resultRef.current || prefersReducedMotion()) return;
+    const button = resultRef.current.querySelector('#copy-link');
+    const link = resultRef.current.querySelector('.result-link');
+    if (button) {
+      animate(button, {
+        scale: [1, 1.06, 1],
+        duration: 360,
+        ease: spring({ bounce: 0.45, duration: 360 }),
+      });
+    }
+    if (link) {
+      animate(link, {
+        backgroundColor: ['rgba(74, 222, 128, 0.16)', 'rgba(0, 0, 0, 0.32)'],
+        duration: 620,
+        ease: 'outCubic',
+      });
+    }
+  }, [copied]);
 
   const setMessage = (message: string, type: StatusType = '') => setStatus({ message, type });
 
@@ -350,9 +807,41 @@ function App() {
     }
   };
 
+  const animateMetadata = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open || prefersReducedMotion()) return;
+    animate(event.currentTarget.querySelectorAll('label'), {
+      opacity: [0, 1],
+      translateY: [12, 0],
+      duration: 360,
+      delay: stagger(42),
+      ease: 'outCubic',
+    });
+  };
+
   return (
     <div className="app-shell" ref={shellRef}>
-      <div className="aurora" aria-hidden="true"><span className="grid-bg" /></div>
+      {!introDone ? (
+        <div className="boot-loader" aria-hidden="true">
+          <div className="loader-card">
+            <div className="loader-symbol">
+              <span className="loader-node" />
+              <span className="loader-link" />
+              <span className="loader-node" />
+              <span className="loader-link" />
+              <span className="loader-node" />
+            </div>
+            <div className="loader-word">Linksgood</div>
+            <div className="loader-bar"><span className="loader-bar-fill" /></div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="aurora" aria-hidden="true">
+        <span className="grid-bg" />
+        <span className="signal-lane lane-one"><i className="signal-dot" /></span>
+        <span className="signal-lane lane-two"><i className="signal-dot" /></span>
+        <span className="signal-lane lane-three"><i className="signal-dot" /></span>
+      </div>
 
       <header className="topbar motion-rise">
         <a className="brand" href="/" aria-label="Linksgood inicio">
@@ -378,14 +867,15 @@ function App() {
 
       <main className="shell">
         <section className="hero">
-          <h1 className="title motion-rise">
+          <h1 className="title title-copy motion-rise">
             Links cortos, largos y <span className="grad">QR en segundos</span>.
           </h1>
           <p className="subtitle motion-rise">
             Pega un enlace, elige corto o largo, y sal con un link limpio sin anuncios intrusivos ni cuenta obligatoria.
           </p>
 
-          <form id="link-form" className="card glass converter-card motion-rise" onSubmit={createLink}>
+          <form ref={formRef} id="link-form" className="card glass converter-card motion-rise" onSubmit={createLink}>
+            <span className="converter-scan" aria-hidden="true" />
             <div className="converter-intro">
               <div>
                 <p className="eyebrow">Linksgood Studio</p>
@@ -411,7 +901,7 @@ function App() {
             </div>
 
             <label className="sr-only" htmlFor="target-url">Link de destino</label>
-            <div className="field">
+            <div ref={fieldRef} className={hasTarget ? 'field is-filled' : 'field'}>
               <Link2 className="field-icon" aria-hidden="true" size={22} />
               <input
                 id="target-url"
@@ -431,7 +921,14 @@ function App() {
               </button>
             </div>
 
-            <details className="metadata">
+            <div className="flow-meter" aria-hidden="true">
+              <span className="flow-line"><span className="flow-line-fill" style={{ width: flowProgress }} /></span>
+              {[0, 1, 2, 3].map((stage) => (
+                <span key={stage} className={flowStage >= stage ? 'flow-node is-active' : 'flow-node'} />
+              ))}
+            </div>
+
+            <details className="metadata" onToggle={animateMetadata}>
               <summary>
                 <CheckCircle2 aria-hidden="true" size={18} />
                 Personalizar alias, título e imagen
@@ -463,15 +960,15 @@ function App() {
             </details>
 
             <div className="actions">
-              <button className="primary-button" id="submit" type="submit" disabled={busy}>
+              <button className={busy ? 'primary-button is-busy' : 'primary-button'} id="submit" type="submit" disabled={busy}>
                 <span>{busy ? 'Generando...' : 'Generar link'}</span>
                 <ArrowRight aria-hidden="true" size={19} />
               </button>
-              <p id="status" className={`status ${status.type}`} role="status">{status.message}</p>
+              <p ref={statusRef} id="status" className={`status ${status.type}`} role="status">{status.message}</p>
             </div>
 
             {result ? (
-              <section className="inline-result" aria-label="Link generado">
+              <section ref={resultRef} className="inline-result" aria-label="Link generado">
                 <div className="inline-result-main">
                   <div>
                     <p className="eyebrow">Link listo</p>
@@ -494,11 +991,11 @@ function App() {
 
           <ul className="features motion-rise" aria-label="Características">
             {featureItems.map(({ label, Icon }) => (
-              <li key={label}><span className="feat-icon"><Icon size={16} /></span><span>{label}</span></li>
+              <li className="feature-chip" key={label}><span className="feat-icon"><Icon size={16} /></span><span>{label}</span></li>
             ))}
           </ul>
 
-          <section className="card glass preview-card motion-rise" aria-label="Preview social">
+          <section ref={previewRef} className="card glass preview-card motion-rise" aria-label="Preview social">
             <div className="preview-top">
               <div className="preview-thumb" style={previewImage ? { backgroundImage: `url("${previewImage}")` } : undefined}>
                 {!previewImage ? <span>LG</span> : null}

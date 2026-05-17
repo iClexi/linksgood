@@ -38,34 +38,35 @@ const load = async () => {
   const totalVisits = (history.links || []).reduce((sum, link) => sum + Number(link.total_visits || 0), 0);
   const qrVisits = (history.links || []).reduce((sum, link) => sum + Number(link.qr_visits || 0), 0);
   summary.innerHTML = `
-    <div><strong>${history.links?.length || 0}</strong><span>enlaces creados</span></div>
-    <div><strong>${totalVisits}</strong><span>visitas totales</span></div>
-    <div><strong>${qrVisits}</strong><span>scans QR</span></div>
-    <div><strong>${sessions.sessions?.length || 0}</strong><span>sesiones activas</span></div>
+    <div><strong>${history.links?.length || 0}</strong><span>Enlaces creados</span></div>
+    <div><strong>${totalVisits}</strong><span>Visitas totales</span></div>
+    <div><strong>${qrVisits}</strong><span>Scans QR</span></div>
+    <div><strong>${sessions.sessions?.length || 0}</strong><span>Sesiones activas</span></div>
   `;
 
   if (!history.links?.length) {
     historyEl.innerHTML = '<p class="empty">Todavía no has creado enlaces estando logueado.</p>';
   } else {
-    historyEl.innerHTML = table(['Creado', 'Alias', 'Destino', 'Link', 'QR', 'Visitas'], history.links.map((link) => `
+    historyEl.innerHTML = table(['Creado', 'Alias', 'Destino', 'Link', 'QR', 'Visitas', 'Actividad'], history.links.map((link) => `
       <tr>
-        <td>${escapeHtml(formatDate(link.created_at))}</td>
-        <td>${escapeHtml(link.alias_path)}</td>
-        <td>${escapeHtml(link.target_host)}</td>
-        <td><a href="${escapeHtml(link.short_url)}" target="_blank" rel="noreferrer">abrir</a></td>
-        <td><a href="${escapeHtml(link.qr_svg_url)}" target="_blank" rel="noreferrer">SVG</a></td>
-        <td>${escapeHtml(link.total_visits)} (${escapeHtml(link.qr_visits)} QR)</td>
+        <td data-label="Creado">${escapeHtml(formatDate(link.created_at))}</td>
+        <td data-label="Alias">${escapeHtml(link.alias_path)}</td>
+        <td data-label="Destino">${escapeHtml(link.target_host)}</td>
+        <td data-label="Link"><a href="${escapeHtml(link.short_url)}" target="_blank" rel="noreferrer">Abrir</a></td>
+        <td data-label="QR"><a href="${escapeHtml(link.qr_svg_url)}" target="_blank" rel="noreferrer">SVG</a></td>
+        <td data-label="Visitas">${escapeHtml(link.total_visits)} (${escapeHtml(link.qr_visits)} QR)</td>
+        <td data-label="Actividad"><a class="table-action" href="${escapeHtml(link.activity_url || link.stats_url)}">Ver</a></td>
       </tr>
     `));
   }
 
   sessionsEl.innerHTML = table(['Dispositivo', 'IP', 'Creada', 'Última vez', 'Acción'], (sessions.sessions || []).map((session) => `
     <tr>
-      <td>${escapeHtml(session.device_label || 'Dispositivo')}</td>
-      <td>${escapeHtml(session.ip || '')}</td>
-      <td>${escapeHtml(formatDate(session.created_at))}</td>
-      <td>${escapeHtml(formatDate(session.last_seen_at))}</td>
-      <td>${session.current ? '<span class="pill">Actual</span>' : `<button class="table-action" data-revoke="${escapeHtml(session.id)}" type="button">Cerrar</button>`}</td>
+      <td data-label="Dispositivo">${escapeHtml(session.device_label || 'Dispositivo')}</td>
+      <td data-label="IP">${escapeHtml(session.ip || '')}</td>
+      <td data-label="Creada">${escapeHtml(formatDate(session.created_at))}</td>
+      <td data-label="Última vez">${escapeHtml(formatDate(session.last_seen_at))}</td>
+      <td data-label="Acción">${session.current ? '<span class="pill">Actual</span>' : `<button class="table-action" data-revoke="${escapeHtml(session.id)}" type="button">Cerrar</button>`}</td>
     </tr>
   `));
 

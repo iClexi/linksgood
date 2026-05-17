@@ -21,29 +21,29 @@ const load = async () => {
     return;
   }
   summary.innerHTML = `
-    <div><strong>${data.counts.links}</strong><span>enlaces</span></div>
-    <div><strong>${data.counts.visits}</strong><span>visitas</span></div>
-    <div><strong>${data.counts.users}</strong><span>usuarios</span></div>
+    <div><strong>${data.counts.links}</strong><span>Enlaces</span></div>
+    <div><strong>${data.counts.visits}</strong><span>Visitas</span></div>
+    <div><strong>${data.counts.users}</strong><span>Usuarios</span></div>
   `;
   linksEl.innerHTML = table(['Creado', 'Alias', 'Usuario', 'Etiqueta', 'Destino', 'Clicks', 'IP creación'], data.links.map((link) => `
     <tr>
-      <td>${escapeHtml(formatDate(link.created_at))}</td>
-      <td>${escapeHtml(link.alias_path)}</td>
-      <td>${escapeHtml(link.owner_username || 'anónimo')}</td>
-      <td>${escapeHtml(link.owner_label || 'sin etiqueta')}</td>
-      <td>${escapeHtml(link.target_host)}</td>
-      <td>${escapeHtml(link.clicks)}</td>
-      <td>${escapeHtml(link.created_ip)}</td>
+      <td data-label="Creado">${escapeHtml(formatDate(link.created_at))}</td>
+      <td data-label="Alias">${escapeHtml(link.alias_path)}</td>
+      <td data-label="Usuario">${escapeHtml(link.owner_username || 'anónimo')}</td>
+      <td data-label="Etiqueta">${escapeHtml(link.owner_label || 'sin etiqueta')}</td>
+      <td data-label="Destino">${escapeHtml(link.target_host)}</td>
+      <td data-label="Clicks">${escapeHtml(link.clicks)}</td>
+      <td data-label="IP creación">${escapeHtml(link.created_ip)}</td>
     </tr>
   `));
   visitsEl.innerHTML = table(['Fecha', 'Alias', 'Origen', 'Dueño', 'IP', 'Dispositivo', 'Navegador'], data.visits.map((visit) => `<tr>
-      <td>${escapeHtml(formatDate(visit.visited_at))}</td>
-      <td>${escapeHtml(visit.alias_path)}</td>
-      <td>${escapeHtml(visit.source === 'qr' ? 'QR' : 'Link')}</td>
-      <td>${escapeHtml(visit.owner_label || 'sin etiqueta')}</td>
-      <td>${escapeHtml(visit.public_ip || visit.ip || '')}</td>
-      <td>${escapeHtml(visit.device || '')}</td>
-      <td>${escapeHtml((visit.user_agent || '').slice(0, 120))}</td>
+      <td data-label="Fecha">${escapeHtml(formatDate(visit.visited_at))}</td>
+      <td data-label="Alias">${escapeHtml(visit.alias_path)}</td>
+      <td data-label="Origen">${escapeHtml(visit.source === 'qr' ? 'QR' : 'Link')}</td>
+      <td data-label="Dueño">${escapeHtml(visit.owner_label || 'sin etiqueta')}</td>
+      <td data-label="IP">${escapeHtml(visit.public_ip || visit.ip || '')}</td>
+      <td data-label="Dispositivo">${escapeHtml(visit.device || '')}</td>
+      <td data-label="Navegador">${escapeHtml((visit.user_agent || '').slice(0, 120))}</td>
     </tr>`));
 };
 

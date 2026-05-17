@@ -17,10 +17,11 @@ const DATABASE_URL = process.env.LINKS_DATABASE_URL || '';
 const APP_SECRET = process.env.LINKS_APP_SECRET || '';
 const BRAND_NAME = 'Linksgood';
 const AUTH_COOKIE = 'atajo_session';
-const ASSET_VERSION = '20260514-linksgood-videodrop-red5-tsx-spacing';
+const ASSET_VERSION = '20260517-linksgood-full-responsive';
 const SESSION_TTL_SECONDS = Math.max(3600, Number.parseInt(process.env.LINKS_SESSION_TTL_SECONDS || '2592000', 10));
 const PASSWORD_ITERATIONS = Math.max(120000, Number.parseInt(process.env.LINKS_PASSWORD_ITERATIONS || '210000', 10));
-const RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.LINKS_RETENTION_DAYS || '90', 10));
+const RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.LINKS_RETENTION_DAYS || '15', 10));
+const VISIT_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MAX_BODY = 96 * 1024;
 const MAX_HTML_BYTES = 240 * 1024;
 
@@ -590,11 +591,11 @@ function legalPage(kind: LegalKind) {
   });
 }
 
-function statsPage(id: string, key: string) {
+function statsPage(id: string, key?: string, account = false) {
   return pageShell({
     title: `Actividad del enlace - ${BRAND_NAME}`,
     body: `<main class="dashboard">
-  <nav class="topbar compact"><a class="brand" href="/"><span class="brand-mark">LG</span><span>${BRAND_NAME}</span></a><a class="nav-link" href="/">Crear</a></nav>
+  <nav class="topbar compact"><a class="brand" href="/"><span class="brand-mark">LG</span><span>${BRAND_NAME}</span></a><div class="topbar-actions"><a class="nav-link" href="/">Crear</a>${account ? '<a class="nav-link" href="/cuenta">Cuenta</a>' : ''}</div></nav>
   <section class="panel lead-panel">
     <span class="eyebrow">Actividad</span>
     <h1 id="stats-title">Cargando...</h1>
@@ -605,7 +606,7 @@ function statsPage(id: string, key: string) {
     <div id="visits" class="table-wrap"></div>
   </section>
 </main>`,
-    scripts: `<script>window.LINKSGOOD_STATS=${jsonScript({ id, key })}</script><script src="/assets/stats.js" type="module"></script>`,
+    scripts: `<script>window.LINKSGOOD_STATS=${jsonScript(account ? { id, account: true } : { id, key })}</script><script src="/assets/stats.js?v=${ASSET_VERSION}" type="module"></script>`,
   });
 }
 
@@ -628,7 +629,7 @@ function adminPage() {
     <div id="admin-visits" class="table-wrap"></div>
   </section>
 </main>`,
-    scripts: '<script src="/assets/admin.js" type="module"></script>',
+    scripts: `<script src="/assets/admin.js?v=${ASSET_VERSION}" type="module"></script>`,
   });
 }
 
@@ -651,7 +652,7 @@ function accountPage() {
     <div id="account-sessions" class="table-wrap"></div>
   </section>
 </main>`,
-    scripts: '<script src="/assets/account.js" type="module"></script>',
+    scripts: `<script src="/assets/account.js?v=${ASSET_VERSION}" type="module"></script>`,
   });
 }
 
@@ -980,10 +981,19 @@ async function ownerStats(req: IncomingMessage, res: Response, id: string, key: 
   const linkResult = await pool.query('SELECT * FROM links WHERE id = $1 AND owner_key_hash = $2', [id, keyHash]);
   const link = linkResult.rows[0];
   if (!link) return jsonResponse(res, 404, { error: 'No encontrado.' });
+  const data = await linkActivityData(link, {
+    stats_url: `${PUBLIC_URL}/stats/${link.id}/${key}`,
+    qr_svg_url: `${PUBLIC_URL}/qr/${link.id}/${key}.svg`,
+    qr_png_url: `${PUBLIC_URL}/qr/${link.id}/${key}.png`,
+  });
+  jsonResponse(res, 200, data);
+}
+
+async function linkActivityData(link: LinkRow, urls: { qr_svg_url: string; qr_png_url: string; activity_url?: string; stats_url?: string }) {
   const visits = await pool.query(
     `SELECT id, visited_at, source, public_ip, ip, user_agent, referer, accept_language, browser
      FROM link_visits WHERE link_id = $1 ORDER BY visited_at DESC LIMIT 250`,
-    [id],
+    [link.id],
   );
   const summary = await pool.query(
     `SELECT
@@ -991,18 +1001,32 @@ async function ownerStats(req: IncomingMessage, res: Response, id: string, key: 
        count(*) FILTER (WHERE source = 'qr')::int AS qr,
        count(*) FILTER (WHERE source <> 'qr')::int AS link
      FROM link_visits WHERE link_id = $1`,
-    [id],
+    [link.id],
   );
-  jsonResponse(res, 200, {
+  return {
     ok: true,
     link: {
       ...toPublicLink(link),
-      qr_svg_url: `${PUBLIC_URL}/qr/${link.id}/${key}.svg`,
-      qr_png_url: `${PUBLIC_URL}/qr/${link.id}/${key}.png`,
+      ...urls,
     },
     summary: summary.rows[0],
     visits: visits.rows.map(formatVisit),
+  };
+}
+
+async function accountLinkActivity(req: IncomingMessage, res: Response, auth: AuthContext | null, id: string) {
+  if (!auth?.user?.id) return jsonResponse(res, 401, { error: 'Inicia sesión.' });
+  const linkResult = await pool.query('SELECT * FROM links WHERE id = $1 AND user_id = $2', [id, auth.user.id]);
+  const link = linkResult.rows[0];
+  if (!link) return jsonResponse(res, 404, { error: 'No encontrado.' });
+  const activityUrl = `${PUBLIC_URL}/cuenta/actividad/${link.id}`;
+  const data = await linkActivityData(link, {
+    stats_url: activityUrl,
+    activity_url: activityUrl,
+    qr_svg_url: `${PUBLIC_URL}/api/account/links/${link.id}/qr.svg`,
+    qr_png_url: `${PUBLIC_URL}/api/account/links/${link.id}/qr.png`,
   });
+  jsonResponse(res, 200, data);
 }
 
 async function adminOverview(req: IncomingMessage, res: Response, auth: AuthContext | null) {
@@ -1112,6 +1136,8 @@ async function accountHistory(req: IncomingMessage, res: Response, auth: AuthCon
     ok: true,
     links: links.rows.map((row) => ({
       ...toPublicLink(row),
+      stats_url: `${PUBLIC_URL}/cuenta/actividad/${row.id}`,
+      activity_url: `${PUBLIC_URL}/cuenta/actividad/${row.id}`,
       total_visits: row.total_visits,
       qr_visits: row.qr_visits,
       link_visits: row.link_visits,
@@ -1174,6 +1200,8 @@ async function handleRoute(req: IncomingMessage, res: Response) {
     if (req.method === 'GET' && pathname === '/terminos') return htmlResponse(res, 200, legalPage('terms'));
     if (req.method === 'GET' && pathname === '/privacidad') return htmlResponse(res, 200, legalPage('privacy'));
     if (req.method === 'GET' && pathname === '/cuenta') return auth?.user ? htmlResponse(res, 200, accountPage()) : redirect(res, '/');
+    const accountActivityPageMatch = pathname.match(/^\/cuenta\/actividad\/([0-9a-f-]{36})$/);
+    if (req.method === 'GET' && accountActivityPageMatch) return auth?.user ? htmlResponse(res, 200, statsPage(accountActivityPageMatch[1], undefined, true)) : redirect(res, '/');
     if (req.method === 'GET' && pathname === '/admin') return isAdmin(auth) ? htmlResponse(res, 200, adminPage()) : notFound(res);
     if (req.method === 'GET' && pathname === '/api/health') return jsonResponse(res, 200, { ok: true, service: 'linksgood', database: 'postgresql', time: nowIso() });
     if (req.method === 'GET' && pathname === '/api/admin-eligible') return jsonResponse(res, 200, { eligible: isAdmin(auth) });
@@ -1188,6 +1216,8 @@ async function handleRoute(req: IncomingMessage, res: Response) {
     if (req.method === 'POST' && revokeMatch) return revokeSession(req, res, auth, revokeMatch[1]);
     const accountQrMatch = pathname.match(/^\/api\/account\/links\/([0-9a-f-]{36})\/qr\.(svg|png)$/);
     if (req.method === 'GET' && accountQrMatch) return accountQr(req, res, auth, accountQrMatch[1], accountQrMatch[2] as QrFormat);
+    const accountActivityMatch = pathname.match(/^\/api\/account\/links\/([0-9a-f-]{36})\/activity$/);
+    if (req.method === 'GET' && accountActivityMatch) return accountLinkActivity(req, res, auth, accountActivityMatch[1]);
     if (req.method === 'GET' && pathname === '/api/admin/overview') return adminOverview(req, res, auth);
     if (req.method === 'POST' && pathname === '/api/admin/block-ip') return blockIp(req, res, auth);
     if (req.method === 'POST' && pathname === '/api/links') return handleCreateLink(req, res, auth);
@@ -1216,6 +1246,10 @@ async function handleRoute(req: IncomingMessage, res: Response) {
 
 await migrate();
 cleanupOldVisits().catch((error) => console.warn('cleanup failed', error));
+const visitCleanupTimer = setInterval(() => {
+  cleanupOldVisits().catch((error) => console.warn('cleanup failed', error));
+}, VISIT_CLEANUP_INTERVAL_MS);
+visitCleanupTimer.unref();
 
 createServer((req, res) => {
   handleRoute(req, res).catch((error) => routeError(req, res, error));
